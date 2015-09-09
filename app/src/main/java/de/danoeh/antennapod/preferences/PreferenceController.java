@@ -1,6 +1,8 @@
 package de.danoeh.antennapod.preferences;
 
 import android.app.Activity;
+import android.app.AlertDialog;
+import android.app.TimePickerDialog;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
@@ -9,10 +11,16 @@ import android.net.wifi.WifiConfiguration;
 import android.net.wifi.WifiManager;
 import android.os.Build;
 import android.preference.CheckBoxPreference;
+import android.preference.EditTextPreference;
 import android.preference.ListPreference;
 import android.preference.Preference;
 import android.preference.PreferenceScreen;
+import android.text.Editable;
+import android.text.TextWatcher;
+import android.text.format.DateFormat;
 import android.util.Log;
+import android.widget.EditText;
+import android.widget.TimePicker;
 import android.widget.Toast;
 
 import java.io.File;
@@ -28,12 +36,9 @@ import de.danoeh.antennapod.activity.MainActivity;
 import de.danoeh.antennapod.activity.PreferenceActivity;
 import de.danoeh.antennapod.activity.PreferenceActivityGingerbread;
 import de.danoeh.antennapod.asynctask.OpmlExportWorker;
-import de.danoeh.antennapod.core.asynctask.FlattrClickWorker;
 import de.danoeh.antennapod.core.preferences.GpodnetPreferences;
 import de.danoeh.antennapod.core.preferences.UserPreferences;
-import de.danoeh.antennapod.core.util.flattr.FlattrStatus;
 import de.danoeh.antennapod.core.util.flattr.FlattrUtils;
-import de.danoeh.antennapod.core.util.flattr.SimpleFlattrThing;
 import de.danoeh.antennapod.dialog.AuthenticationDialog;
 import de.danoeh.antennapod.dialog.AutoFlattrPreferenceDialog;
 import de.danoeh.antennapod.dialog.GpodnetSetHostnameDialog;
@@ -44,7 +49,6 @@ import de.danoeh.antennapod.dialog.VariableSpeedDialog;
  */
 public class PreferenceController {
     private static final String TAG = "PreferenceController";
-    public static final String PREF_FLATTR_THIS_APP = "prefFlattrThisApp";
     public static final String PREF_FLATTR_SETTINGS = "prefFlattrSettings";
     public static final String PREF_FLATTR_AUTH = "pref_flattr_authenticate";
     public static final String PREF_FLATTR_REVOKE = "prefRevokeAccess";
@@ -99,23 +103,6 @@ public class PreferenceController {
                     }
             );
         }
-
-        ui.findPreference(PreferenceController.PREF_FLATTR_THIS_APP).setOnPreferenceClickListener(
-                new Preference.OnPreferenceClickListener() {
-
-                    @Override
-                    public boolean onPreferenceClick(Preference preference) {
-                        new FlattrClickWorker(activity,
-                                new SimpleFlattrThing(activity.getString(R.string.app_name),
-                                        FlattrUtils.APP_URL,
-                                        new FlattrStatus(FlattrStatus.STATUS_QUEUE)
-                                )
-                        ).executeAsync();
-
-                        return true;
-                    }
-                }
-        );
 
         ui.findPreference(PreferenceController.PREF_FLATTR_REVOKE).setOnPreferenceClickListener(
                 new Preference.OnPreferenceClickListener() {
@@ -186,6 +173,24 @@ public class PreferenceController {
                             }
                         }
                 );
+        ui.findPreference(UserPreferences.PREF_HIDDEN_DRAWER_ITEMS)
+                .setOnPreferenceClickListener(new Preference.OnPreferenceClickListener() {
+                    @Override
+                    public boolean onPreferenceClick(Preference preference) {
+                        showDrawerPreferencesDialog();
+                        return true;
+                    }
+                });
+
+        ui.findPreference(UserPreferences.PREF_UPDATE_INTERVAL)
+                .setOnPreferenceClickListener(new Preference.OnPreferenceClickListener() {
+                    @Override
+                    public boolean onPreferenceClick(Preference preference) {
+                        showUpdateIntervalTimePreferencesDialog();
+                        return true;
+                    }
+                });
+
         ui.findPreference(UserPreferences.PREF_ENABLE_AUTODL)
                 .setOnPreferenceChangeListener(new Preference.OnPreferenceChangeListener() {
                     @Override
@@ -214,6 +219,52 @@ public class PreferenceController {
                             }
                         }
                 );
+        ui.findPreference(UserPreferences.PREF_PARALLEL_DOWNLOADS)
+                .setOnPreferenceChangeListener(
+                        new Preference.OnPreferenceChangeListener() {
+                            @Override
+                            public boolean onPreferenceChange(Preference preference, Object o) {
+                                if (o instanceof String) {
+                                    try {
+                                        int value = Integer.valueOf((String) o);
+                                        if (1 <= value && value <= 50) {
+                                            setParallelDownloadsText(value);
+                                            return true;
+                                        }
+                                    } catch(NumberFormatException e) {
+                                        return false;
+                                    }
+                                }
+                                return false;
+                            }
+                        }
+                );
+        // validate and set correct value: number of downloads between 1 and 50 (inclusive)
+        final EditText ev = ((EditTextPreference)ui.findPreference(UserPreferences.PREF_PARALLEL_DOWNLOADS)).getEditText();
+        ev.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {}
+
+            @Override
+            public void afterTextChanged(Editable s) {
+                if(s.length() > 0) {
+                    try {
+                        int value = Integer.valueOf(s.toString());
+                        if (value <= 0) {
+                            ev.setText("1");
+                        } else if (value > 50) {
+                            ev.setText("50");
+                        }
+                    } catch(NumberFormatException e) {
+                        ev.setText("6");
+                    }
+                    ev.setSelection(ev.getText().length());
+                }
+            }
+        });
         ui.findPreference(UserPreferences.PREF_EPISODE_CACHE_SIZE)
                 .setOnPreferenceChangeListener(
                         new Preference.OnPreferenceChangeListener() {
@@ -285,14 +336,34 @@ public class PreferenceController {
 
                             @Override
                             public void onConfirmed(boolean autoFlattrEnabled, float autoFlattrValue) {
-                                UserPreferences.setAutoFlattrSettings(activity, autoFlattrEnabled, autoFlattrValue);
+                                UserPreferences.setAutoFlattrSettings(autoFlattrEnabled, autoFlattrValue);
                                 checkItemVisibility();
                             }
                         });
                 return true;
             }
         });
-        buildUpdateIntervalPreference();
+        ui.findPreference(UserPreferences.PREF_IMAGE_CACHE_SIZE)
+                .setOnPreferenceChangeListener(
+                        new Preference.OnPreferenceChangeListener() {
+                            @Override
+                            public boolean onPreferenceChange(Preference preference, Object o) {
+                                if (o instanceof String) {
+                                    int newValue = Integer.valueOf((String) o) * 1024 * 1024;
+                                    if(newValue != UserPreferences.getImageCacheSize()) {
+                                        AlertDialog.Builder dialog = new AlertDialog.Builder(ui.getActivity());
+                                        dialog.setTitle(android.R.string.dialog_alert_title);
+                                        dialog.setMessage(R.string.pref_restart_required);
+                                        dialog.setPositiveButton(android.R.string.ok, null);
+                                        dialog.show();
+                                    }
+                                    return true;
+                                }
+                                return false;
+                            }
+                        }
+                );
+        buildSmartMarkAsPlayedPreference();
         buildAutodownloadSelectedNetworsPreference();
         setSelectedNetworksEnabled(UserPreferences
                 .isEnableAutodownloadWifiFilter());
@@ -300,6 +371,7 @@ public class PreferenceController {
 
     public void onResume() {
         checkItemVisibility();
+        setParallelDownloadsText(UserPreferences.getParallelDownloads());
         setEpisodeCacheSizeText(UserPreferences.getEpisodeCacheSize());
         setDataFolderText();
         updateGpodnetPreferenceScreen();
@@ -323,12 +395,8 @@ public class PreferenceController {
         ui.findPreference(PreferenceController.PREF_GPODNET_HOSTNAME).setSummary(GpodnetPreferences.getHostname());
     }
 
-    private void buildUpdateIntervalPreference() {
+    private String[] getUpdateIntervalEntries(final String[] values) {
         final Resources res = ui.getActivity().getResources();
-
-        ListPreference pref = (ListPreference) ui.findPreference(UserPreferences.PREF_UPDATE_INTERVAL);
-        String[] values = res.getStringArray(
-                R.array.update_intervall_values);
         String[] entries = new String[values.length];
         for (int x = 0; x < values.length; x++) {
             Integer v = Integer.parseInt(values[x]);
@@ -337,19 +405,33 @@ public class PreferenceController {
                     entries[x] = res.getString(R.string.pref_update_interval_hours_manual);
                     break;
                 case 1:
-                    entries[x] = v
-                            + " "
-                            + res.getString(R.string.pref_update_interval_hours_singular);
+                    entries[x] = v + " " + res.getString(R.string.pref_update_interval_hours_singular);
                     break;
                 default:
-                    entries[x] = v + " "
-                            + res.getString(R.string.pref_update_interval_hours_plural);
+                    entries[x] = v + " " + res.getString(R.string.pref_update_interval_hours_plural);
                     break;
 
             }
         }
-        pref.setEntries(entries);
+        return entries;
+    }
 
+    private void buildSmartMarkAsPlayedPreference() {
+        final Resources res = ui.getActivity().getResources();
+
+        ListPreference pref = (ListPreference) ui.findPreference(UserPreferences.PREF_SMART_MARK_AS_PLAYED_SECS);
+        String[] values = res.getStringArray(
+                R.array.smart_mark_as_played_values);
+        String[] entries = new String[values.length];
+        for (int x = 0; x < values.length; x++) {
+            if(x == 0) {
+                entries[x] = res.getString(R.string.pref_smart_mark_as_played_disabled);
+            } else {
+                Integer v = Integer.parseInt(values[x]);
+                entries[x] = res.getQuantityString(R.plurals.time_seconds_quantified, v, v);
+            }
+        }
+        pref.setEntries(entries);
     }
 
     private void setSelectedNetworksEnabled(boolean b) {
@@ -377,6 +459,14 @@ public class PreferenceController {
 
         ui.findPreference(UserPreferences.PREF_ENABLE_AUTODL_ON_BATTERY)
                 .setEnabled(UserPreferences.isEnableAutodownload());
+    }
+
+    private void setParallelDownloadsText(int downloads) {
+        final Resources res = ui.getActivity().getResources();
+
+        String s = Integer.toString(downloads)
+                    + res.getString(R.string.parallel_downloads_suffix);
+        ui.findPreference(UserPreferences.PREF_PARALLEL_DOWNLOADS).setSummary(s);
     }
 
     private void setEpisodeCacheSizeText(int cacheSize) {
@@ -441,9 +531,7 @@ public class PreferenceController {
                         }
 
                         UserPreferences.setAutodownloadSelectedNetworks(
-                                activity, prefValuesList
-                                        .toArray(new String[prefValuesList
-                                                .size()])
+                                prefValuesList.toArray(new String[prefValuesList.size()])
                         );
                         return true;
                     } else {
@@ -481,6 +569,99 @@ public class PreferenceController {
                 }
             }
         }
+    }
+
+    private void showDrawerPreferencesDialog() {
+        final Context context = ui.getActivity();
+        final List<String> hiddenDrawerItems = UserPreferences.getHiddenDrawerItems();
+        final String[] navTitles = context.getResources().getStringArray(R.array.nav_drawer_titles);
+        final String[] NAV_DRAWER_TAGS = MainActivity.NAV_DRAWER_TAGS;
+        boolean[] checked = new boolean[MainActivity.NAV_DRAWER_TAGS.length];
+        for(int i=0; i < NAV_DRAWER_TAGS.length; i++) {
+            String tag = NAV_DRAWER_TAGS[i];
+            if(!hiddenDrawerItems.contains(tag)) {
+                checked[i] = true;
+            }
+        }
+
+        AlertDialog.Builder builder = new AlertDialog.Builder(context);
+        builder.setTitle(R.string.drawer_preferences);
+        builder.setMultiChoiceItems(navTitles, checked, new DialogInterface.OnMultiChoiceClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which, boolean isChecked) {
+                if (isChecked) {
+                    hiddenDrawerItems.remove(NAV_DRAWER_TAGS[which]);
+                } else {
+                    hiddenDrawerItems.add(NAV_DRAWER_TAGS[which]);
+                }
+            }
+        });
+        builder.setPositiveButton(R.string.confirm_label, new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+                UserPreferences.setHiddenDrawerItems(context, hiddenDrawerItems);
+            }
+        });
+        builder.setNegativeButton(R.string.cancel_label, null);
+        builder.create().show();
+    }
+
+    private void showUpdateIntervalTimePreferencesDialog() {
+        final Context context = ui.getActivity();
+
+        AlertDialog.Builder builder = new AlertDialog.Builder(context);
+        builder.setTitle(R.string.pref_autoUpdateIntervallOrTime_title);
+        builder.setMessage(R.string.pref_autoUpdateIntervallOrTime_message);
+        builder.setNegativeButton(R.string.pref_autoUpdateIntervallOrTime_Disable, new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+                UserPreferences.setUpdateInterval(0);
+            }
+        });
+        builder.setNeutralButton(R.string.pref_autoUpdateIntervallOrTime_Interval, new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+                AlertDialog.Builder builder = new AlertDialog.Builder(context);
+                builder.setTitle(context.getString(R.string.pref_autoUpdateIntervallOrTime_Interval));
+                final String[] values = context.getResources().getStringArray(R.array.update_intervall_values);
+                final String[] entries = getUpdateIntervalEntries(values);
+                builder.setSingleChoiceItems(entries, -1, new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+                        int hours = Integer.valueOf(values[which]);
+                        UserPreferences.setUpdateInterval(hours);
+                        dialog.dismiss();
+                    }
+                });
+                builder.setNegativeButton(context.getString(R.string.cancel_label), null);
+                builder.show();
+            }
+        });
+        builder.setPositiveButton(R.string.pref_autoUpdateIntervallOrTime_TimeOfDay, new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+                        int hourOfDay = 7, minute = 0;
+                        int[] updateTime = UserPreferences.getUpdateTimeOfDay();
+                        if (updateTime.length == 2) {
+                            hourOfDay = updateTime[0];
+                            minute = updateTime[1];
+                        }
+                        TimePickerDialog timePickerDialog = new TimePickerDialog(context, new TimePickerDialog.OnTimeSetListener() {
+                            @Override
+                            public void onTimeSet(TimePicker view, int hourOfDay, int minute) {
+                                if (view.getTag() == null) { // onTimeSet() may get called twice!
+                                    view.setTag("TAGGED");
+                                    UserPreferences.setUpdateTimeOfDay(hourOfDay, minute);
+                                }
+                            }
+                        }, hourOfDay, minute, DateFormat.is24HourFormat(context));
+                        timePickerDialog.setTitle(context.getString(R.string.pref_autoUpdateIntervallOrTime_TimeOfDay));
+                        timePickerDialog.show();
+                    }
+                }
+
+        );
+        builder.show();
     }
 
 

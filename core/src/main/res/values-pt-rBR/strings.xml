@@ -54,7 +54,6 @@
   <string name="mark_all_read_label">Marcar todos como lido</string>
   <string name="show_info_label">Mostrar informação</string>
   <string name="share_link_label">Compartilhar link do site</string>
-  <string name="share_source_label">Compartilhar link do feed</string>
   <string name="feed_delete_confirmation_msg">Por favor confirme que você deseja apagar este feed e TODOS os episódios que você fez download deste feed.</string>
   <string name="feed_remover_msg">Removendo feed</string>
   <!--actions on feeditems-->
@@ -85,7 +84,7 @@
   <string name="download_error_connection_error">Erro de conexão</string>
   <string name="download_error_unknown_host">Host desconhecido</string>
   <string name="cancel_all_downloads_label">Cancelar todos os downloads</string>
-  <string name="download_cancelled_msg">Download cancelado</string>
+  <string name="download_canceled_msg">Download cancelado</string>
   <string name="download_report_title">Downloads finalizados</string>
   <string name="download_error_malformed_url">URL inválida</string>
   <string name="download_error_io_error">Erro de IO</string>
@@ -148,8 +147,6 @@
   <string name="pref_followQueue_sum">Pular para próximo item da fila quando a reprodução terminar</string>
   <string name="playback_pref">Reprodução</string>
   <string name="network_pref">Rede</string>
-  <string name="pref_autoUpdateIntervall_title">Intervalo de atualização</string>
-  <string name="pref_autoUpdateIntervall_sum">Especifica o intervalo com que os feeds serão atualizados automaticamente ou desabilita esta funcionalidade</string>
   <string name="pref_downloadMediaOnWifiOnly_sum">Fazer download dos arquivos apenas via rede WiFi</string>
   <string name="pref_followQueue_title">Reprodução contínua</string>
   <string name="pref_downloadMediaOnWifiOnly_title">Download de mídia via WiFi</string>
@@ -198,7 +195,6 @@
   <string name="found_in_title_label">Encontrado no título</string>
   <!--OPML import and export-->
   <string name="opml_import_txtv_button_lable">Arquivos OPML permitem que você mova seus podcasts de um programa de podcasts para outro.</string>
-  <string name="opml_import_explanation">Para importar um arquivo OPML, você precisa armazená-lo neste diretório e pressionar o botão abaixo para iniciar o processo de importação.</string>
   <string name="start_import_label">Iniciar importação</string>
   <string name="opml_import_label">Importação de OPML</string>
   <string name="opml_directory_error">ERRO!</string>
@@ -207,11 +203,9 @@
   <string name="opml_import_error_dir_empty">O diretório de importação está vazio.</string>
   <string name="select_all_label">Selecionar todos</string>
   <string name="deselect_all_label">Remover seleção</string>
-  <string name="choose_file_to_import_label">Escolher arquivo para importar</string>
   <string name="opml_export_label">Exportar OPML</string>
   <string name="exporting_label">Exportando...</string>
   <string name="export_error_label">Erro na exportação</string>
-  <string name="opml_export_success_title">OMPL exportado com sucesso</string>
   <string name="opml_export_success_sum">O arquivo .opml foi gravado em:\u0020</string>
   <!--Sleep timer-->
   <string name="set_sleeptimer_label">Configura desligamento automático</string>
@@ -274,5 +268,6 @@
   <string name="in_queue_label">Episódio está na fila</string>
   <string name="new_episodes_count_label">Numero de novos episódios</string>
   <!--Feed information screen-->
+  <!--Progress information-->
   <!--AntennaPodSP-->
 </resources>

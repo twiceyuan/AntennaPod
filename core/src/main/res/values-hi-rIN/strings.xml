@@ -57,7 +57,6 @@
   <string name="remove_feed_label">पॉडकास्ट हटाएँ
 </string>
   <string name="share_link_label">शेयर वेबसाइट लिंक</string>
-  <string name="share_source_label">शेयर फ़ीड लिंक</string>
   <string name="feed_delete_confirmation_msg">इसकी पुष्टि करें कि आप इस फ़ीड और इस फ़ीड के सभी प्रकरणों को हटाना चाहते हैं जिन्हें आपने डाउनलोड किया है.</string>
   <string name="feed_remover_msg">फ़ीड निकाल रहा है</string>
   <!--actions on feeditems-->
@@ -91,7 +90,7 @@
   <string name="download_error_connection_error">कनेक्शन त्रुटि</string>
   <string name="download_error_unknown_host">अज्ञात होस्ट</string>
   <string name="cancel_all_downloads_label">सभी डाउनलोड रद्द  करें</string>
-  <string name="download_cancelled_msg">डाउनलोड रद्द</string>
+  <string name="download_canceled_msg">डाउनलोड रद्द</string>
   <string name="download_report_title">डाउनलोड पूरा हो गया है</string>
   <string name="download_error_malformed_url">गलत URL</string>
   <string name="download_error_io_error">आईओ त्रुटि</string>
@@ -158,8 +157,6 @@
   <string name="pref_followQueue_sum">प्लेबैक के पूरा होने पर अगली पंक्ति आइटम के लिए जाएँ</string>
   <string name="playback_pref">प्लेबैक</string>
   <string name="network_pref">संजाल</string>
-  <string name="pref_autoUpdateIntervall_title">अंतराल अद्यतन</string>
-  <string name="pref_autoUpdateIntervall_sum">फ़ीड स्वचालित रूप से ताजा कर रहे हैं जिसमें एक अंतराल निर्दिष्ट करें या उसे निष्क्रिय करें </string>
   <string name="pref_downloadMediaOnWifiOnly_sum">केवल वाईफ़ाई पर मीडिया फ़ाइलें डाउनलोड करें</string>
   <string name="pref_followQueue_title">सतत प्लेबैक</string>
   <string name="pref_downloadMediaOnWifiOnly_title">वाईफाई मीडिया डाउनलोड करें</string>
@@ -208,7 +205,6 @@
   <string name="found_in_title_label">शीर्षक में मिला</string>
   <!--OPML import and export-->
   <string name="opml_import_txtv_button_lable">OPML फ़ाइलें आपको एक podcatcher से दूसरे को अपने पॉडकास्ट स्थानांतरित करने के लिए अनुमति देते हैं.</string>
-  <string name="opml_import_explanation">एक OPML फ़ाइल आयात करने के लिए, आपको इसे निम्नलिखित निर्देशिका में डालना है और आयात की प्रक्रिया शुरू करने के लिए नीचे दिए गए बटन को प्रेस करना है.</string>
   <string name="start_import_label">आयात प्रारंभ</string>
   <string name="opml_import_label">OPML आयात</string>
   <string name="opml_directory_error">त्रुटि!</string>
@@ -217,11 +213,9 @@
   <string name="opml_import_error_dir_empty">आयात निर्देशिका खाली है.</string>
   <string name="select_all_label">सभी का चयन करें</string>
   <string name="deselect_all_label">सभी का चयन रद्द करें</string>
-  <string name="choose_file_to_import_label">आयात करने के लिए फ़ाइल चुनें</string>
   <string name="opml_export_label">OPML निर्यात</string>
   <string name="exporting_label">निर्यात ...</string>
   <string name="export_error_label">निर्यात त्रुटि</string>
-  <string name="opml_export_success_title">OPML निर्यात सफल.</string>
   <string name="opml_export_success_sum">.ompl फ़ाइल लिखा गया था:\u0020</string>
   <!--Sleep timer-->
   <string name="set_sleeptimer_label">स्लीप टाइमर सेट</string>
@@ -277,5 +271,6 @@
   <string name="downloading_label">डाउनलोड कर रहा है ...</string>
   <!--Content descriptions for image buttons-->
   <!--Feed information screen-->
+  <!--Progress information-->
   <!--AntennaPodSP-->
 </resources>

@@ -2,6 +2,7 @@ package de.danoeh.antennapod.core.feed;
 
 import android.content.Context;
 import android.net.Uri;
+import android.support.annotation.Nullable;
 
 import org.apache.commons.lang3.StringUtils;
 
@@ -9,10 +10,8 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 
-import de.danoeh.antennapod.core.asynctask.PicassoImageResource;
-import de.danoeh.antennapod.core.preferences.UserPreferences;
+import de.danoeh.antennapod.core.asynctask.ImageResource;
 import de.danoeh.antennapod.core.storage.DBWriter;
-import de.danoeh.antennapod.core.util.EpisodeFilter;
 import de.danoeh.antennapod.core.util.flattr.FlattrStatus;
 import de.danoeh.antennapod.core.util.flattr.FlattrThing;
 
@@ -21,7 +20,7 @@ import de.danoeh.antennapod.core.util.flattr.FlattrThing;
  *
  * @author daniel
  */
-public class Feed extends FeedFile implements FlattrThing, PicassoImageResource {
+public class Feed extends FeedFile implements FlattrThing, ImageResource {
     public static final int FEEDFILETYPE_FEED = 0;
     public static final String TYPE_RSS2 = "rss";
     public static final String TYPE_RSS091 = "rss";
@@ -81,12 +80,20 @@ public class Feed extends FeedFile implements FlattrThing, PicassoImageResource 
      */
     private String nextPageLink;
 
+    private boolean lastUpdateFailed;
+
+    /**
+     * Contains property strings. If such a property applies to a feed item, it is not shown in the feed list
+     */
+    private FeedItemFilter itemfilter;
+
     /**
      * This constructor is used for restoring a feed from the database.
      */
     public Feed(long id, Date lastUpdate, String title, String link, String description, String paymentLink,
                 String author, String language, String type, String feedIdentifier, FeedImage image, String fileUrl,
-                String downloadUrl, boolean downloaded, FlattrStatus status, boolean paged, String nextPageLink) {
+                String downloadUrl, boolean downloaded, FlattrStatus status, boolean paged, String nextPageLink,
+                String filter, boolean lastUpdateFailed) {
         super(fileUrl, downloadUrl, downloaded);
         this.id = id;
         this.title = title;
@@ -106,8 +113,13 @@ public class Feed extends FeedFile implements FlattrThing, PicassoImageResource 
         this.flattrStatus = status;
         this.paged = paged;
         this.nextPageLink = nextPageLink;
-
-        items = new ArrayList<FeedItem>();
+        this.items = new ArrayList<FeedItem>();
+        if(filter != null) {
+            this.itemfilter = new FeedItemFilter(filter);
+        } else {
+            this.itemfilter = new FeedItemFilter(new String[0]);
+        }
+        this.lastUpdateFailed = lastUpdateFailed;
     }
 
     /**
@@ -117,7 +129,7 @@ public class Feed extends FeedFile implements FlattrThing, PicassoImageResource 
                 String author, String language, String type, String feedIdentifier, FeedImage image, String fileUrl,
                 String downloadUrl, boolean downloaded) {
         this(id, lastUpdate, title, link, description, paymentLink, author, language, type, feedIdentifier, image,
-                fileUrl, downloadUrl, downloaded, new FlattrStatus(), false, null);
+                fileUrl, downloadUrl, downloaded, new FlattrStatus(), false, null, null, false);
     }
 
     /**
@@ -125,7 +137,6 @@ public class Feed extends FeedFile implements FlattrThing, PicassoImageResource 
      */
     public Feed() {
         super();
-        items = new ArrayList<FeedItem>();
         lastUpdate = new Date();
         this.flattrStatus = new FlattrStatus();
     }
@@ -156,58 +167,31 @@ public class Feed extends FeedFile implements FlattrThing, PicassoImageResource 
      */
     public Feed(String url, Date lastUpdate, String title, String username, String password) {
         this(url, lastUpdate, title);
-        preferences = new FeedPreferences(0, true, username, password);
+        preferences = new FeedPreferences(0, true, FeedPreferences.AutoDeleteAction.GLOBAL, username, password);
     }
 
-    /**
-     * Returns the number of FeedItems where 'read' is false. If the 'display
-     * only episodes' - preference is set to true, this method will only count
-     * items with episodes.
-     */
-    public int getNumOfNewItems() {
-        int count = 0;
-        for (FeedItem item : items) {
-            if (item.getState() == FeedItem.State.NEW) {
-                if (!UserPreferences.isDisplayOnlyEpisodes()
-                        || item.getMedia() != null) {
-                    count++;
-                }
-            }
-        }
-        return count;
-    }
 
     /**
-     * Returns the number of FeedItems where the media started to play but
-     * wasn't finished yet.
+     * Returns true if at least one item in the itemlist is unread.
+     *
      */
-    public int getNumOfStartedItems() {
-        int count = 0;
-
+    public boolean hasNewItems() {
         for (FeedItem item : items) {
-            FeedItem.State state = item.getState();
-            if (state == FeedItem.State.IN_PROGRESS
-                    || state == FeedItem.State.PLAYING) {
-                count++;
+            if (item.isNew()) {
+                return true;
             }
         }
-        return count;
+        return false;
     }
 
     /**
      * Returns true if at least one item in the itemlist is unread.
      *
-     * @param enableEpisodeFilter true if this method should only count items with episodes if
-     *                            the 'display only episodes' - preference is set to true by the
-     *                            user.
      */
-    public boolean hasNewItems(boolean enableEpisodeFilter) {
+    public boolean hasUnplayedItems() {
         for (FeedItem item : items) {
-            if (item.getState() == FeedItem.State.NEW) {
-                if (!(enableEpisodeFilter && UserPreferences
-                        .isDisplayOnlyEpisodes()) || item.getMedia() != null) {
-                    return true;
-                }
+            if (false == item.isNew() && false == item.isPlayed()) {
+                return true;
             }
         }
         return false;
@@ -216,30 +200,17 @@ public class Feed extends FeedFile implements FlattrThing, PicassoImageResource 
     /**
      * Returns the number of FeedItems.
      *
-     * @param enableEpisodeFilter true if this method should only count items with episodes if
-     *                            the 'display only episodes' - preference is set to true by the
-     *                            user.
      */
-    public int getNumOfItems(boolean enableEpisodeFilter) {
-        if (enableEpisodeFilter && UserPreferences.isDisplayOnlyEpisodes()) {
-            return EpisodeFilter.countItemsWithEpisodes(items);
-        } else {
-            return items.size();
-        }
+    public int getNumOfItems() {
+        return items.size();
     }
 
     /**
      * Returns the item at the specified index.
      *
-     * @param enableEpisodeFilter true if this method should ignore items without episdodes if
-     *                            the episodes filter has been enabled by the user.
      */
-    public FeedItem getItemAtIndex(boolean enableEpisodeFilter, int position) {
-        if (enableEpisodeFilter && UserPreferences.isDisplayOnlyEpisodes()) {
-            return EpisodeFilter.accessEpisodeByIndex(items, position);
-        } else {
-            return items.get(position);
-        }
+    public FeedItem getItemAtIndex(int position) {
+        return items.get(position);
     }
 
     /**
@@ -348,6 +319,19 @@ public class Feed extends FeedFile implements FlattrThing, PicassoImageResource 
             return true;
         }
         return false;
+    }
+
+    public FeedItem getMostRecentItem() {
+        // we could sort, but we don't need to, a simple search is fine...
+        Date mostRecentDate = new Date(0);
+        FeedItem mostRecentItem = null;
+        for (FeedItem item : items) {
+            if (item.getPubDate().after(mostRecentDate)) {
+                mostRecentDate = item.getPubDate();
+                mostRecentItem = item;
+            }
+        }
+        return mostRecentItem;
     }
 
     @Override
@@ -503,4 +487,24 @@ public class Feed extends FeedFile implements FlattrThing, PicassoImageResource 
     public void setNextPageLink(String nextPageLink) {
         this.nextPageLink = nextPageLink;
     }
+
+    @Nullable
+    public FeedItemFilter getItemFilter() {
+        return itemfilter;
+    }
+
+    public void setHiddenItemProperties(String[] properties) {
+        if (properties != null) {
+            this.itemfilter = new FeedItemFilter(properties);
+        }
+    }
+
+    public boolean hasLastUpdateFailed() {
+        return this.lastUpdateFailed;
+    }
+
+    public void setLastUpdateFailed(boolean lastUpdateFailed) {
+        this.lastUpdateFailed = lastUpdateFailed;
+    }
+
 }

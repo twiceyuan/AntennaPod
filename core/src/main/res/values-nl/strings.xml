@@ -54,7 +54,6 @@
   <string name="mark_all_read_label">Alles als gelezen markeren</string>
   <string name="show_info_label">Toon informatie</string>
   <string name="share_link_label">Website link delen</string>
-  <string name="share_source_label">Feed link delen</string>
   <string name="feed_delete_confirmation_msg">Bevestig dat u deze feed en ALLE afleveringen van deze feed die u hebt gedownload wilt verwijderen.</string>
   <string name="feed_remover_msg">Feed verwijderen</string>
   <!--actions on feeditems-->
@@ -86,7 +85,7 @@
   <string name="download_error_unknown_host">Onbekende host</string>
   <string name="download_error_unauthorized">Authenticatie fout</string>
   <string name="cancel_all_downloads_label">Alle downloads annuleren</string>
-  <string name="download_cancelled_msg">Download geannuleerd</string>
+  <string name="download_canceled_msg">Download geannuleerd</string>
   <string name="download_report_title">Downloads afgerond</string>
   <string name="download_error_malformed_url">Misvormde URL</string>
   <string name="download_error_io_error">IO fout</string>
@@ -162,8 +161,6 @@
   <string name="pref_followQueue_sum">Volgende wachtrij item afspelen als de episode voltooid is</string>
   <string name="playback_pref">Afspelen</string>
   <string name="network_pref">Netwerk</string>
-  <string name="pref_autoUpdateIntervall_title">Update interval</string>
-  <string name="pref_autoUpdateIntervall_sum">Voer een tijdsinterval in waarin de feeds automatisch worden vernieuwd, of schakel het uit</string>
   <string name="pref_downloadMediaOnWifiOnly_sum">Download mediabestanden alleen via WiFi</string>
   <string name="pref_followQueue_title">Continu afspelen</string>
   <string name="pref_downloadMediaOnWifiOnly_title">WiFi download van media</string>
@@ -213,7 +210,6 @@
   <string name="found_in_title_label">Gevonden in de titel</string>
   <!--OPML import and export-->
   <string name="opml_import_txtv_button_lable">Met OPML-bestanden kan je podcasts van de ene naar de andere podcatcher verplaatsen.</string>
-  <string name="opml_import_explanation">Om een OPML-bestand te importeren moet je het in de volgende map zetten en op onderstaande knop drukken.</string>
   <string name="start_import_label">Start importeren</string>
   <string name="opml_import_label">OPML import</string>
   <string name="opml_directory_error">FOUT!</string>
@@ -222,11 +218,9 @@
   <string name="opml_import_error_dir_empty">De import map is leeg.</string>
   <string name="select_all_label">Selecteer alles</string>
   <string name="deselect_all_label">Deselecteer alles</string>
-  <string name="choose_file_to_import_label">Kies het te importeren bestand</string>
   <string name="opml_export_label">OPML export</string>
   <string name="exporting_label">Aan het exporteren...</string>
   <string name="export_error_label">Export fout</string>
-  <string name="opml_export_success_title">OPML export succesvol.</string>
   <string name="opml_export_success_sum"> Het OPML-bestand is in \u0020 geplaatst</string>
   <!--Sleep timer-->
   <string name="set_sleeptimer_label">Slaap timer instellen</string>
@@ -298,6 +292,7 @@
   <string name="new_episodes_count_label">Aantal nieuwe afleveringen</string>
   <string name="in_progress_episodes_count_label">Aantal afleveringen dat begonnen te luisteren zijn</string>
   <!--Feed information screen-->
+  <!--Progress information-->
   <!--AntennaPodSP-->
   <string name="sp_apps_importing_feeds_msg">Abonnementen aan het importeren vanuit single-purpose apps...</string>
 </resources>

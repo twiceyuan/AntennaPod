@@ -42,7 +42,6 @@
   <string name="mark_all_read_label">Marcar todo como leído</string>
   <string name="show_info_label">Información del programa</string>
   <string name="share_link_label">Compartir el enlace de la web</string>
-  <string name="share_source_label">Compartir el enlace del canal</string>
   <string name="feed_delete_confirmation_msg">Confirme que quiere eliminar este canal y TODOS los episodios descargados del mismo.</string>
   <!--actions on feeditems-->
   <string name="download_label">Descargar</string>
@@ -72,7 +71,7 @@
   <string name="download_error_connection_error">Error de conexión</string>
   <string name="download_error_unknown_host">Host desconocido</string>
   <string name="cancel_all_downloads_label">Cancelar todas las descargas</string>
-  <string name="download_cancelled_msg">Descarga cancelada</string>
+  <string name="download_canceled_msg">Descarga cancelada</string>
   <string name="download_report_title">Descargas completadas</string>
   <string name="download_error_malformed_url">URL malformada</string>
   <string name="download_error_io_error">Error de E/S</string>
@@ -125,8 +124,6 @@
   <string name="pref_followQueue_sum">Saltar al siguiente elemento de la cola al acabar la reproducción</string>
   <string name="playback_pref">Reproducción</string>
   <string name="network_pref">Red</string>
-  <string name="pref_autoUpdateIntervall_title">Intervalo de actualización</string>
-  <string name="pref_autoUpdateIntervall_sum">Especificar el intervalo en que se actualizarán automáticamente los canales, o desactivarlo</string>
   <string name="pref_downloadMediaOnWifiOnly_sum">Solo descargar los contenidos por WiFi</string>
   <string name="pref_followQueue_title">Reproducción continua</string>
   <string name="pref_downloadMediaOnWifiOnly_title">Descarga de contenidos por WiFi</string>
@@ -158,7 +155,6 @@
   <string name="search_label">Buscar</string>
   <string name="found_in_title_label">Encontrado en el título</string>
   <!--OPML import and export-->
-  <string name="opml_import_explanation">Para importar un archivo OPML, debe copiarlo al siguiente directorio y pulsar el botón que se muestra abajo.</string>
   <string name="start_import_label">Comenzar la importación</string>
   <string name="opml_import_label">Importación de OPML</string>
   <string name="opml_directory_error">¡ERROR!</string>
@@ -167,11 +163,9 @@
   <string name="opml_import_error_dir_empty">El directorio de importación está vacío</string>
   <string name="select_all_label">Seleccionar todo</string>
   <string name="deselect_all_label">Deseleccionar todo</string>
-  <string name="choose_file_to_import_label">Elegir qué archivo importar</string>
   <string name="opml_export_label">Exportar a OPML</string>
   <string name="exporting_label">Exportando...</string>
   <string name="export_error_label">Error en la exportación</string>
-  <string name="opml_export_success_title">Exportación a OPML exitosa</string>
   <string name="opml_export_success_sum">El archivo OPML se ha escrito en:\u0020</string>
   <!--Sleep timer-->
   <string name="set_sleeptimer_label">Establecer un temporizador</string>
@@ -196,5 +190,6 @@
   <!--Online feed view-->
   <!--Content descriptions for image buttons-->
   <!--Feed information screen-->
+  <!--Progress information-->
   <!--AntennaPodSP-->
 </resources>

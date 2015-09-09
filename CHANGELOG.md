@@ -1,5 +1,35 @@
 Change Log
 ==========
+Version 1.3
+-----------
+* Bulk actions on feed episodes (download, queue, delete)
+* Reduced space used by images
+* Automatic refresh at a certain time of day
+* Customizable indicators and sorting for feeds
+* Ability to share feeds
+* Improved auto download
+* Many fixes and usability improvements
+
+Version 1.2
+-----------
+* Optionally disable swiping and dragging in the queue
+* Resume playback after phone call
+* Filter episodes in the Podcast feed
+* Hide items in the Nav drawer
+* Customize times for fast forward and rewind
+* Resolved issues with opening some OPML files
+* Various bug fixes and usability improvements
+
+Version 1.1
+-----------
+* iTunes podcast integration
+* Swipe to remove items from the queue
+* Set the number of parallel downloads
+* Fix for gpodder.net on old devices
+* Fixed date problems for some feeds
+* Display improvements
+* Usability improvements
+* Several other bugfixes
 
 Version 1.0
 -----------

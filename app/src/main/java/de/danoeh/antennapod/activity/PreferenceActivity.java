@@ -45,9 +45,12 @@ public class PreferenceActivity extends ActionBarActivity {
     @TargetApi(Build.VERSION_CODES.HONEYCOMB)
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        // This must be the FIRST thing we do, otherwise other code may not have the
+        // reference it needs
+        instance = this;
+        
         setTheme(UserPreferences.getTheme());
         super.onCreate(savedInstanceState);
-        instance = this;
 
         ActionBar ab = getSupportActionBar();
         if (ab != null) {
@@ -60,10 +63,13 @@ public class PreferenceActivity extends ActionBarActivity {
         root.setLayoutParams(new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT));
         setContentView(root);
+
+        // we need to create the PreferenceController before the MainFragment
+        // since the MainFragment depends on the preferenceController already being created
+        preferenceController = new PreferenceController(preferenceUI);
+
         prefFragment = new MainFragment();
         getFragmentManager().beginTransaction().replace(R.id.content, prefFragment).commit();
-
-        preferenceController = new PreferenceController(preferenceUI);
     }
 
     @Override

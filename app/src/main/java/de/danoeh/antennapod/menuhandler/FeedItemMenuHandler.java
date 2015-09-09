@@ -3,26 +3,32 @@ package de.danoeh.antennapod.menuhandler;
 import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
+import android.util.Log;
+import android.widget.Toast;
 
-import de.danoeh.antennapod.core.BuildConfig;
 import de.danoeh.antennapod.R;
 import de.danoeh.antennapod.core.feed.FeedItem;
+import de.danoeh.antennapod.core.feed.FeedMedia;
+import de.danoeh.antennapod.core.gpoddernet.model.GpodnetEpisodeAction;
+import de.danoeh.antennapod.core.gpoddernet.model.GpodnetEpisodeAction.Action;
+import de.danoeh.antennapod.core.preferences.GpodnetPreferences;
+import de.danoeh.antennapod.core.preferences.UserPreferences;
 import de.danoeh.antennapod.core.service.playback.PlaybackService;
 import de.danoeh.antennapod.core.storage.DBTasks;
 import de.danoeh.antennapod.core.storage.DBWriter;
 import de.danoeh.antennapod.core.storage.DownloadRequestException;
-import de.danoeh.antennapod.core.storage.DownloadRequester;
-import de.danoeh.antennapod.core.util.QueueAccess;
+import de.danoeh.antennapod.core.util.IntentUtils;
+import de.danoeh.antennapod.core.util.LongList;
 import de.danoeh.antennapod.core.util.ShareUtils;
 
 /**
  * Handles interactions with the FeedItemMenu.
  */
 public class FeedItemMenuHandler {
+
     private static final String TAG = "FeedItemMenuHandler";
 
     private FeedItemMenuHandler() {
-
     }
 
     /**
@@ -51,18 +57,12 @@ public class FeedItemMenuHandler {
      * @param queueAccess      Used for testing if the queue contains the selected item
      * @return Returns true if selectedItem is not null.
      */
-    public static boolean onPrepareMenu(MenuInterface mi,
-                                        FeedItem selectedItem, boolean showExtendedMenu, QueueAccess queueAccess) {
+    public static boolean onPrepareMenu(Context context, MenuInterface mi, FeedItem selectedItem,
+                                        boolean showExtendedMenu, LongList queueAccess) {
         if (selectedItem == null) {
             return false;
         }
-        DownloadRequester requester = DownloadRequester.getInstance();
         boolean hasMedia = selectedItem.getMedia() != null;
-        boolean downloaded = hasMedia && selectedItem.getMedia().isDownloaded();
-        boolean downloading = hasMedia
-                && requester.isDownloadingFile(selectedItem.getMedia());
-        boolean notLoadedAndNotLoading = hasMedia && (!downloaded)
-                && (!downloading);
         boolean isPlaying = hasMedia
                 && selectedItem.getState() == FeedItem.State.PLAYING;
 
@@ -71,41 +71,53 @@ public class FeedItemMenuHandler {
         if (!isPlaying) {
             mi.setItemVisibility(R.id.skip_episode_item, false);
         }
-        if (!downloaded || isPlaying) {
-            mi.setItemVisibility(R.id.play_item, false);
-            mi.setItemVisibility(R.id.remove_item, false);
-        }
-        if (!notLoadedAndNotLoading) {
-            mi.setItemVisibility(R.id.download_item, false);
-        }
-        if (!(notLoadedAndNotLoading | downloading) | isPlaying) {
-            mi.setItemVisibility(R.id.stream_item, false);
-        }
-        if (!downloading) {
-            mi.setItemVisibility(R.id.cancel_download_item, false);
-        }
 
         boolean isInQueue = queueAccess.contains(selectedItem.getId());
+        if(queueAccess.size() == 0 || queueAccess.get(0) == selectedItem.getId()) {
+            mi.setItemVisibility(R.id.move_to_top_item, false);
+        }
+        if(queueAccess.size() == 0 || queueAccess.get(queueAccess.size()-1) == selectedItem.getId()) {
+            mi.setItemVisibility(R.id.move_to_bottom_item, false);
+        }
         if (!isInQueue || isPlaying) {
             mi.setItemVisibility(R.id.remove_from_queue_item, false);
         }
         if (!(!isInQueue && selectedItem.getMedia() != null)) {
             mi.setItemVisibility(R.id.add_to_queue_item, false);
         }
-        if (!showExtendedMenu || selectedItem.getLink() == null) {
-            mi.setItemVisibility(R.id.share_link_item, false);
-        }
-
-        if (!BuildConfig.DEBUG
-                || !(state == FeedItem.State.IN_PROGRESS || state == FeedItem.State.READ)) {
-            mi.setItemVisibility(R.id.mark_unread_item, false);
-        }
-        if (!(state == FeedItem.State.NEW || state == FeedItem.State.IN_PROGRESS)) {
-            mi.setItemVisibility(R.id.mark_read_item, false);
-        }
 
         if (!showExtendedMenu || selectedItem.getLink() == null) {
             mi.setItemVisibility(R.id.visit_website_item, false);
+            mi.setItemVisibility(R.id.share_link_item, false);
+            mi.setItemVisibility(R.id.share_link_with_position_item, false);
+        }
+        if (!showExtendedMenu || !hasMedia || selectedItem.getMedia().getDownload_url() == null) {
+            mi.setItemVisibility(R.id.share_download_url_item, false);
+            mi.setItemVisibility(R.id.share_download_url_with_position_item, false);
+        }
+        if(false == hasMedia || selectedItem.getMedia().getPosition() <= 0) {
+            mi.setItemVisibility(R.id.share_link_with_position_item, false);
+            mi.setItemVisibility(R.id.share_download_url_with_position_item, false);
+        }
+
+        if (!(state == FeedItem.State.UNREAD || state == FeedItem.State.IN_PROGRESS)) {
+            mi.setItemVisibility(R.id.mark_read_item, false);
+        }
+        if (!(state == FeedItem.State.IN_PROGRESS || state == FeedItem.State.READ)) {
+            mi.setItemVisibility(R.id.mark_unread_item, false);
+        }
+
+        if(selectedItem.getMedia() == null || selectedItem.getMedia().getPosition() == 0) {
+            mi.setItemVisibility(R.id.reset_position, false);
+        }
+
+        if(false == UserPreferences.isEnableAutodownload()) {
+            mi.setItemVisibility(R.id.activate_auto_download, false);
+            mi.setItemVisibility(R.id.deactivate_auto_download, false);
+        } else if(selectedItem.getAutoDownload()) {
+            mi.setItemVisibility(R.id.activate_auto_download, false);
+        } else {
+            mi.setItemVisibility(R.id.deactivate_auto_download, false);
         }
 
         if (selectedItem.getPaymentLink() == null || !selectedItem.getFlattrStatus().flattrable()) {
@@ -121,58 +133,87 @@ public class FeedItemMenuHandler {
      * @param excludeIds Menu item that should be excluded
      * @return true if selectedItem is not null.
      */
-    public static boolean onPrepareMenu(MenuInterface mi,
-                                        FeedItem selectedItem, boolean showExtendedMenu, QueueAccess queueAccess, int... excludeIds) {
-        boolean rc = onPrepareMenu(mi, selectedItem, showExtendedMenu, queueAccess);
+    public static boolean onPrepareMenu(Context context, MenuInterface mi, FeedItem selectedItem,
+                                        boolean showExtendedMenu, LongList queueAccess, int... excludeIds) {
+        boolean rc = onPrepareMenu(context, mi, selectedItem, showExtendedMenu, queueAccess);
         if (rc && excludeIds != null) {
             for (int id : excludeIds) {
                 mi.setItemVisibility(id, false);
             }
         }
-
         return rc;
     }
 
     public static boolean onMenuItemClicked(Context context, int menuItemId,
                                             FeedItem selectedItem) throws DownloadRequestException {
-        DownloadRequester requester = DownloadRequester.getInstance();
         switch (menuItemId) {
             case R.id.skip_episode_item:
-                context.sendBroadcast(new Intent(
-                        PlaybackService.ACTION_SKIP_CURRENT_EPISODE));
-                break;
-            case R.id.download_item:
-                DBTasks.downloadFeedItems(context, selectedItem);
-                break;
-            case R.id.play_item:
-                DBTasks.playMedia(context, selectedItem.getMedia(), true, true,
-                        false);
+                context.sendBroadcast(new Intent(PlaybackService.ACTION_SKIP_CURRENT_EPISODE));
                 break;
             case R.id.remove_item:
                 DBWriter.deleteFeedMediaOfItem(context, selectedItem.getMedia().getId());
                 break;
-            case R.id.cancel_download_item:
-                requester.cancelDownload(context, selectedItem.getMedia());
-                break;
             case R.id.mark_read_item:
-                DBWriter.markItemRead(context, selectedItem, true, true);
+                selectedItem.setPlayed(true);
+                DBWriter.markItemRead(context, selectedItem, true, false);
+                if(GpodnetPreferences.loggedIn()) {
+                    FeedMedia media = selectedItem.getMedia();
+                    // not all items have media, Gpodder only cares about those that do
+                    if (media != null) {
+                        GpodnetEpisodeAction actionPlay = new GpodnetEpisodeAction.Builder(selectedItem, Action.PLAY)
+                                .currentDeviceId()
+                                .currentTimestamp()
+                                .started(media.getDuration() / 1000)
+                                .position(media.getDuration() / 1000)
+                                .total(media.getDuration() / 1000)
+                                .build();
+                        GpodnetPreferences.enqueueEpisodeAction(actionPlay);
+                    }
+                }
                 break;
             case R.id.mark_unread_item:
-                DBWriter.markItemRead(context, selectedItem, false, true);
+                selectedItem.setPlayed(false);
+                DBWriter.markItemRead(context, selectedItem, false, false);
+                if(GpodnetPreferences.loggedIn()) {
+                    GpodnetEpisodeAction actionNew = new GpodnetEpisodeAction.Builder(selectedItem, Action.NEW)
+                            .currentDeviceId()
+                            .currentTimestamp()
+                            .build();
+                    GpodnetPreferences.enqueueEpisodeAction(actionNew);
+                }
                 break;
+            case R.id.move_to_top_item:
+                DBWriter.moveQueueItemToTop(context, selectedItem.getId(), true);
+                return true;
+            case R.id.move_to_bottom_item:
+                DBWriter.moveQueueItemToBottom(context, selectedItem.getId(), true);
             case R.id.add_to_queue_item:
                 DBWriter.addQueueItem(context, selectedItem.getId());
                 break;
             case R.id.remove_from_queue_item:
-                DBWriter.removeQueueItem(context, selectedItem.getId(), true);
+                DBWriter.removeQueueItem(context, selectedItem, true);
                 break;
-            case R.id.stream_item:
-                DBTasks.playMedia(context, selectedItem.getMedia(), true, true,
-                        true);
+            case R.id.reset_position:
+                selectedItem.getMedia().setPosition(0);
+                DBWriter.markItemRead(context, selectedItem, false, true);
+                break;
+            case R.id.activate_auto_download:
+                selectedItem.setAutoDownload(true);
+                DBWriter.setFeedItemAutoDownload(context, selectedItem, true);
+                break;
+            case R.id.deactivate_auto_download:
+                selectedItem.setAutoDownload(false);
+                DBWriter.setFeedItemAutoDownload(context, selectedItem, false);
                 break;
             case R.id.visit_website_item:
                 Uri uri = Uri.parse(selectedItem.getLink());
-                context.startActivity(new Intent(Intent.ACTION_VIEW, uri));
+                Intent intent = new Intent(Intent.ACTION_VIEW, uri);
+                if(IntentUtils.isCallable(context, intent)) {
+                    context.startActivity(intent);
+                } else {
+                    Toast.makeText(context, context.getString(R.string.download_error_malformed_url),
+                            Toast.LENGTH_SHORT);
+                }
                 break;
             case R.id.support_item:
                 DBTasks.flattrItemIfLoggedIn(context, selectedItem);
@@ -180,7 +221,17 @@ public class FeedItemMenuHandler {
             case R.id.share_link_item:
                 ShareUtils.shareFeedItemLink(context, selectedItem);
                 break;
+            case R.id.share_download_url_item:
+                ShareUtils.shareFeedItemDownloadLink(context, selectedItem);
+                break;
+            case R.id.share_link_with_position_item:
+                ShareUtils.shareFeedItemLink(context, selectedItem, true);
+                break;
+            case R.id.share_download_url_with_position_item:
+                ShareUtils.shareFeedItemDownloadLink(context, selectedItem, true);
+                break;
             default:
+                Log.d(TAG, "Unknown menuItemId: " + menuItemId);
                 return false;
         }
         // Refresh menu state

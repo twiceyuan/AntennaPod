@@ -1,5 +1,10 @@
 package de.danoeh.antennapod.activity;
 
+import android.content.ClipData;
+import android.content.Context;
+import android.content.DialogInterface;
+import android.content.Intent;
+import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.support.v7.app.ActionBarActivity;
@@ -9,23 +14,32 @@ import android.util.Log;
 import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
+import android.view.View;
+import android.widget.AdapterView;
+import android.widget.AdapterView.OnItemSelectedListener;
 import android.widget.CheckBox;
 import android.widget.CompoundButton;
 import android.widget.EditText;
 import android.widget.ImageView;
+import android.widget.Spinner;
 import android.widget.TextView;
+import android.widget.Toast;
 
-import com.squareup.picasso.Picasso;
+import com.bumptech.glide.Glide;
+import com.bumptech.glide.load.engine.DiskCacheStrategy;
+import com.joanzapata.android.iconify.Iconify;
 
-import de.danoeh.antennapod.BuildConfig;
 import de.danoeh.antennapod.R;
+import de.danoeh.antennapod.core.dialog.ConfirmationDialog;
 import de.danoeh.antennapod.core.dialog.DownloadRequestErrorDialogCreator;
 import de.danoeh.antennapod.core.feed.Feed;
 import de.danoeh.antennapod.core.feed.FeedPreferences;
+import de.danoeh.antennapod.core.glide.ApGlideSettings;
 import de.danoeh.antennapod.core.preferences.UserPreferences;
 import de.danoeh.antennapod.core.storage.DBReader;
 import de.danoeh.antennapod.core.storage.DBWriter;
 import de.danoeh.antennapod.core.storage.DownloadRequestException;
+import de.danoeh.antennapod.core.util.IntentUtils;
 import de.danoeh.antennapod.core.util.LangUtils;
 import de.danoeh.antennapod.menuhandler.FeedMenuHandler;
 
@@ -34,6 +48,7 @@ import de.danoeh.antennapod.menuhandler.FeedMenuHandler;
  */
 public class FeedInfoActivity extends ActionBarActivity {
     private static final String TAG = "FeedInfoActivity";
+    private boolean autoDeleteChanged = false;
 
     public static final String EXTRA_FEED_ID = "de.danoeh.antennapod.extra.feedId";
 
@@ -44,9 +59,32 @@ public class FeedInfoActivity extends ActionBarActivity {
     private TextView txtvDescription;
     private TextView txtvLanguage;
     private TextView txtvAuthor;
+    private TextView txtvUrl;
     private EditText etxtUsername;
     private EditText etxtPassword;
     private CheckBox cbxAutoDownload;
+    private Spinner spnAutoDelete;
+
+    private final View.OnClickListener copyUrlToClipboard = new View.OnClickListener() {
+        @Override
+        public void onClick(View v) {
+            if(feed != null && feed.getDownload_url() != null) {
+                String url = feed.getDownload_url();
+                if (android.os.Build.VERSION.SDK_INT >= 11) {
+                    ClipData clipData = ClipData.newPlainText(url, url);
+                    android.content.ClipboardManager cm = (android.content.ClipboardManager) FeedInfoActivity.this
+                            .getSystemService(Context.CLIPBOARD_SERVICE);
+                    cm.setPrimaryClip(clipData);
+                } else {
+                    android.text.ClipboardManager cm = (android.text.ClipboardManager) FeedInfoActivity.this
+                            .getSystemService(Context.CLIPBOARD_SERVICE);
+                    cm.setText(url);
+                }
+                Toast t = Toast.makeText(FeedInfoActivity.this, R.string.copied_url_msg, Toast.LENGTH_SHORT);
+                t.show();
+            }
+        }
+    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -61,9 +99,13 @@ public class FeedInfoActivity extends ActionBarActivity {
         txtvDescription = (TextView) findViewById(R.id.txtvDescription);
         txtvLanguage = (TextView) findViewById(R.id.txtvLanguage);
         txtvAuthor = (TextView) findViewById(R.id.txtvAuthor);
+        txtvUrl = (TextView) findViewById(R.id.txtvUrl);
         cbxAutoDownload = (CheckBox) findViewById(R.id.cbxAutoDownload);
+        spnAutoDelete = (Spinner) findViewById(R.id.spnAutoDelete);
         etxtUsername = (EditText) findViewById(R.id.etxtUsername);
         etxtPassword = (EditText) findViewById(R.id.etxtPassword);
+
+        txtvUrl.setOnClickListener(copyUrlToClipboard);
 
         AsyncTask<Long, Void, Feed> loadTask = new AsyncTask<Long, Void, Feed>() {
 
@@ -76,23 +118,28 @@ public class FeedInfoActivity extends ActionBarActivity {
             protected void onPostExecute(Feed result) {
                 if (result != null) {
                     feed = result;
-                    if (BuildConfig.DEBUG)
-                        Log.d(TAG, "Language is " + feed.getLanguage());
-                    if (BuildConfig.DEBUG)
-                        Log.d(TAG, "Author is " + feed.getAuthor());
+                    Log.d(TAG, "Language is " + feed.getLanguage());
+                    Log.d(TAG, "Author is " + feed.getAuthor());
+                    Log.d(TAG, "URL is " + feed.getDownload_url());
+                    FeedPreferences prefs = feed.getPreferences();
                     imgvCover.post(new Runnable() {
 
                         @Override
                         public void run() {
-                            Picasso.with(FeedInfoActivity.this)
+                            Glide.with(FeedInfoActivity.this)
                                     .load(feed.getImageUri())
-                                    .fit()
+                                    .placeholder(R.color.light_gray)
+                                    .error(R.color.light_gray)
+                                    .diskCacheStrategy(ApGlideSettings.AP_DISK_CACHE_STRATEGY)
+                                    .fitCenter()
+                                    .dontAnimate()
                                     .into(imgvCover);
                         }
                     });
 
                     txtvTitle.setText(feed.getTitle());
-                    txtvDescription.setText(feed.getDescription());
+                    String description = feed.getDescription();
+                    txtvDescription.setText((description != null) ? description.trim() : "");
                     if (feed.getAuthor() != null) {
                         txtvAuthor.setText(feed.getAuthor());
                     }
@@ -100,19 +147,53 @@ public class FeedInfoActivity extends ActionBarActivity {
                         txtvLanguage.setText(LangUtils
                                 .getLanguageString(feed.getLanguage()));
                     }
+                    txtvUrl.setText(feed.getDownload_url() + " {fa-paperclip}");
+                            Iconify.addIcons(txtvUrl);
 
                     cbxAutoDownload.setEnabled(UserPreferences.isEnableAutodownload());
-                    cbxAutoDownload.setChecked(feed.getPreferences().getAutoDownload());
+                    cbxAutoDownload.setChecked(prefs.getAutoDownload());
                     cbxAutoDownload.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
                         @Override
                         public void onCheckedChanged(CompoundButton compoundButton, boolean checked) {
                             feed.getPreferences().setAutoDownload(checked);
                             feed.savePreferences(FeedInfoActivity.this);
+                            ApplyToEpisodesDialog dialog = new ApplyToEpisodesDialog(FeedInfoActivity.this,
+                                    feed, checked);
+                            dialog.createNewDialog().show();
                         }
                     });
+                    spnAutoDelete.setOnItemSelectedListener(new OnItemSelectedListener() {
+                        @Override
+                        public void onItemSelected(AdapterView<?> parent, View view, int pos, long id) {
+                            FeedPreferences.AutoDeleteAction auto_delete_action;
+                            switch (parent.getSelectedItemPosition()) {
+                                case 0:
+                                    auto_delete_action = FeedPreferences.AutoDeleteAction.GLOBAL;
+                                    break;
 
-                    etxtUsername.setText(feed.getPreferences().getUsername());
-                    etxtPassword.setText(feed.getPreferences().getPassword());
+                                case 1:
+                                    auto_delete_action = FeedPreferences.AutoDeleteAction.YES;
+                                    break;
+
+                                case 2:
+                                    auto_delete_action = FeedPreferences.AutoDeleteAction.NO;
+                                    break;
+
+                                default: // TODO - add exceptions here
+                                    return;
+                            }
+                            feed.getPreferences().setAutoDeleteAction(auto_delete_action);// p
+                            autoDeleteChanged = true;
+                        }
+                        @Override
+                        public void onNothingSelected(AdapterView<?> parent) {
+                            // Another interface callback
+                        }
+                    });
+                    spnAutoDelete.setSelection(prefs.getAutoDeleteAction().ordinal());
+
+                    etxtUsername.setText(prefs.getUsername());
+                    etxtPassword.setText(prefs.getPassword());
 
                     etxtUsername.addTextChangedListener(authTextWatcher);
                     etxtPassword.addTextChangedListener(authTextWatcher);
@@ -150,13 +231,18 @@ public class FeedInfoActivity extends ActionBarActivity {
     @Override
     protected void onPause() {
         super.onPause();
-        if (feed != null && authInfoChanged) {
-            Log.d(TAG, "Auth info changed, saving credentials");
+        if (feed != null) {
             FeedPreferences prefs = feed.getPreferences();
-            prefs.setUsername(etxtUsername.getText().toString());
-            prefs.setPassword(etxtPassword.getText().toString());
-            DBWriter.setFeedPreferences(this, prefs);
+            if (authInfoChanged) {
+                Log.d(TAG, "Auth info changed, saving credentials");
+                prefs.setUsername(etxtUsername.getText().toString());
+                prefs.setPassword(etxtPassword.getText().toString());
+            }
+            if (authInfoChanged || autoDeleteChanged) {
+                DBWriter.setFeedPreferences(this, prefs);
+            }
             authInfoChanged = false;
+            autoDeleteChanged = false;
         }
     }
 
@@ -174,7 +260,8 @@ public class FeedInfoActivity extends ActionBarActivity {
         menu.findItem(R.id.support_item).setVisible(
                 feed != null && feed.getPaymentLink() != null);
         menu.findItem(R.id.share_link_item).setVisible(feed != null && feed.getLink() != null);
-        menu.findItem(R.id.visit_website_item).setVisible(feed != null && feed.getLink() != null);
+        menu.findItem(R.id.visit_website_item).setVisible(feed != null && feed.getLink() != null &&
+                IntentUtils.isCallable(this, new Intent(Intent.ACTION_VIEW, Uri.parse(feed.getLink()))));
         return true;
     }
 
@@ -195,4 +282,25 @@ public class FeedInfoActivity extends ActionBarActivity {
                 return super.onOptionsItemSelected(item);
         }
     }
+
+    private class ApplyToEpisodesDialog extends ConfirmationDialog {
+
+        private final Feed feed;
+        private final boolean autoDownload;
+
+        public ApplyToEpisodesDialog(Context context, Feed feed, boolean autoDownload) {
+            super(context, R.string.auto_download_apply_to_items_title,
+                    R.string.auto_download_apply_to_items_message);
+            this.feed = feed;
+            this.autoDownload = autoDownload;
+            setPositiveText(R.string.yes);
+            setNegativeText(R.string.no);
+        }
+
+        @Override
+        public  void onConfirmButtonPressed(DialogInterface dialog) {
+            DBWriter.setFeedsItemsAutoDownload(context, feed, autoDownload);
+        }
+    }
+
 }

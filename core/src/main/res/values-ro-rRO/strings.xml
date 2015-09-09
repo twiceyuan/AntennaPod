@@ -50,7 +50,6 @@
   <string name="mark_all_read_label">Marchează toate ca citite</string>
   <string name="show_info_label">Arată informații</string>
   <string name="share_link_label">Împarte adresă website</string>
-  <string name="share_source_label">Împarte adresă feed</string>
   <string name="feed_delete_confirmation_msg">Confirmați ștergerea feedului și a TUTUROR episoadelor pe care le-ați descărcat.</string>
   <!--actions on feeditems-->
   <string name="download_label">Descarcă</string>
@@ -80,7 +79,7 @@
   <string name="download_error_connection_error">Eroare de conexiune</string>
   <string name="download_error_unknown_host">Host necunoscut</string>
   <string name="cancel_all_downloads_label">Anulează toate descărcările</string>
-  <string name="download_cancelled_msg">Descărcare anulată</string>
+  <string name="download_canceled_msg">Descărcare anulată</string>
   <string name="download_report_title">Descărcări terminate</string>
   <string name="download_error_malformed_url">URL malformat</string>
   <string name="download_error_io_error">Eroare IO</string>
@@ -140,8 +139,6 @@
   <string name="pref_followQueue_sum">Sari la următorul element din coadă cand se termină ascultarea</string>
   <string name="playback_pref">Ascultare</string>
   <string name="network_pref">Rețea</string>
-  <string name="pref_autoUpdateIntervall_title">Interval actualizare</string>
-  <string name="pref_autoUpdateIntervall_sum">Specifică un interval în care feedurile sunt actualizate automat sau oprește funcția</string>
   <string name="pref_downloadMediaOnWifiOnly_sum">Descarcă fișiere media doar pe WiFi</string>
   <string name="pref_followQueue_title">Ascultare continuă</string>
   <string name="pref_downloadMediaOnWifiOnly_title">Descărcare media pe WiFi</string>
@@ -182,7 +179,6 @@
   <string name="search_label">Caută</string>
   <string name="found_in_title_label">Găsit în titlu</string>
   <!--OPML import and export-->
-  <string name="opml_import_explanation">Pentru a importa un fișier OPML trebuie să-l salvați în următorul director și apăsați butonul de mai jos pentru a începe procesul.</string>
   <string name="start_import_label">Începe importarea</string>
   <string name="opml_import_label">OPML import</string>
   <string name="opml_directory_error">EROARE!</string>
@@ -191,11 +187,9 @@
   <string name="opml_import_error_dir_empty">Directorul de import este gol.</string>
   <string name="select_all_label">Selectează toate</string>
   <string name="deselect_all_label">Deselectează toate</string>
-  <string name="choose_file_to_import_label">Alege fișier pentru import</string>
   <string name="opml_export_label">Exportă OPML</string>
   <string name="exporting_label">Exportă...</string>
   <string name="export_error_label">Eroare exportare</string>
-  <string name="opml_export_success_title">Exportare opml cu succes.</string>
   <string name="opml_export_success_sum">Fișierul .opml a fost scris în:\u0020</string>
   <!--Sleep timer-->
   <string name="set_sleeptimer_label">Setează cronometru somn</string>
@@ -240,5 +234,6 @@
   <string name="downloading_label">Se descarcă...</string>
   <!--Content descriptions for image buttons-->
   <!--Feed information screen-->
+  <!--Progress information-->
   <!--AntennaPodSP-->
 </resources>

@@ -20,21 +20,18 @@ import java.util.concurrent.FutureTask;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import de.danoeh.antennapod.core.BuildConfig;
 import de.danoeh.antennapod.core.ClientConfig;
 import de.danoeh.antennapod.core.asynctask.FlattrClickWorker;
 import de.danoeh.antennapod.core.asynctask.FlattrStatusFetcher;
 import de.danoeh.antennapod.core.feed.EventDistributor;
 import de.danoeh.antennapod.core.feed.Feed;
-import de.danoeh.antennapod.core.feed.FeedImage;
 import de.danoeh.antennapod.core.feed.FeedItem;
 import de.danoeh.antennapod.core.feed.FeedMedia;
-import de.danoeh.antennapod.core.preferences.UserPreferences;
 import de.danoeh.antennapod.core.service.GpodnetSyncService;
 import de.danoeh.antennapod.core.service.download.DownloadStatus;
 import de.danoeh.antennapod.core.service.playback.PlaybackService;
 import de.danoeh.antennapod.core.util.DownloadError;
-import de.danoeh.antennapod.core.util.QueueAccess;
+import de.danoeh.antennapod.core.util.LongList;
 import de.danoeh.antennapod.core.util.comparator.FeedItemPubdateComparator;
 import de.danoeh.antennapod.core.util.exception.MediaFileNotFoundException;
 import de.danoeh.antennapod.core.util.flattr.FlattrUtils;
@@ -171,66 +168,23 @@ public final class DBTasks {
                     isRefreshing.set(false);
 
                     if (FlattrUtils.hasToken()) {
-                        if (BuildConfig.DEBUG) Log.d(TAG, "Flattring all pending things.");
+                        Log.d(TAG, "Flattring all pending things.");
                         new FlattrClickWorker(context).executeAsync(); // flattr pending things
 
-                        if (BuildConfig.DEBUG) Log.d(TAG, "Fetching flattr status.");
+                        Log.d(TAG, "Fetching flattr status.");
                         new FlattrStatusFetcher(context).start();
 
                     }
                     if (ClientConfig.gpodnetCallbacks.gpodnetEnabled()) {
                         GpodnetSyncService.sendSyncIntent(context);
                     }
+                    Log.d(TAG, "refreshAllFeeds autodownload");
                     autodownloadUndownloadedItems(context);
                 }
             }.start();
         } else {
-            if (BuildConfig.DEBUG)
-                Log.d(TAG,
-                        "Ignoring request to refresh all feeds: Refresh lock is locked");
+            Log.d(TAG, "Ignoring request to refresh all feeds: Refresh lock is locked");
         }
-    }
-
-    /**
-     * Used by refreshExpiredFeeds to determine which feeds should be refreshed.
-     * This method will use the value specified in the UserPreferences as the
-     * expiration time.
-     *
-     * @param context Used for DB access.
-     * @return A list of expired feeds. An empty list will be returned if there
-     * are no expired feeds.
-     */
-    public static List<Feed> getExpiredFeeds(final Context context) {
-        long millis = UserPreferences.getUpdateInterval();
-
-        if (millis > 0) {
-
-            List<Feed> feedList = DBReader.getExpiredFeedsList(context,
-                    millis);
-            if (feedList.size() > 0) {
-                refreshFeeds(context, feedList);
-            }
-            return feedList;
-        } else {
-            return new ArrayList<Feed>();
-        }
-    }
-
-    /**
-     * Refreshes expired Feeds in the list returned by the getExpiredFeedsList(Context, long) method in DBReader.
-     * The expiration date parameter is determined by the update interval specified in {@link UserPreferences}.
-     *
-     * @param context Used for DB access.
-     */
-    public static void refreshExpiredFeeds(final Context context) {
-        if (BuildConfig.DEBUG)
-            Log.d(TAG, "Refreshing expired feeds");
-
-        new Thread() {
-            public void run() {
-                refreshFeeds(context, getExpiredFeeds(context));
-            }
-        }.start();
     }
 
     private static void refreshFeeds(final Context context,
@@ -298,44 +252,29 @@ public final class DBTasks {
     }
 
     /**
-     * Updates a specific Feed.
+     * Refresh a specific Feed. The refresh may get canceled if the feed does not seem to be modified
+     * and the last update was only few days ago.
      *
      * @param context Used for requesting the download.
      * @param feed    The Feed object.
      */
     public static void refreshFeed(Context context, Feed feed)
             throws DownloadRequestException {
+        Log.d(TAG, "id " + feed.getId());
         refreshFeed(context, feed, false);
     }
 
     private static void refreshFeed(Context context, Feed feed, boolean loadAllPages) throws DownloadRequestException {
         Feed f;
+        Date lastUpdate = feed.hasLastUpdateFailed() ? new Date(0) : feed.getLastUpdate();
         if (feed.getPreferences() == null) {
-            f = new Feed(feed.getDownload_url(), new Date(), feed.getTitle());
+            f = new Feed(feed.getDownload_url(), lastUpdate, feed.getTitle());
         } else {
-            f = new Feed(feed.getDownload_url(), new Date(), feed.getTitle(),
+            f = new Feed(feed.getDownload_url(), lastUpdate, feed.getTitle(),
                     feed.getPreferences().getUsername(), feed.getPreferences().getPassword());
         }
         f.setId(feed.getId());
         DownloadRequester.getInstance().downloadFeed(context, f, loadAllPages);
-    }
-
-    /**
-     * Notifies the database about a missing FeedImage file. This method will attempt to re-download the file.
-     *
-     * @param context Used for requesting the download.
-     * @param image   The FeedImage object.
-     */
-    public static void notifyInvalidImageFile(final Context context,
-                                              final FeedImage image) {
-        Log.i(TAG,
-                "The DB was notified about an invalid image download. It will now try to re-download the image file");
-        try {
-            DownloadRequester.getInstance().downloadImage(context, image);
-        } catch (DownloadRequestException e) {
-            e.printStackTrace();
-            Log.w(TAG, "Failed to download invalid feed image");
-        }
     }
 
     /**
@@ -427,25 +366,6 @@ public final class DBTasks {
         }
     }
 
-    static int getNumberOfUndownloadedEpisodes(
-            final List<FeedItem> queue, final List<FeedItem> unreadItems) {
-        int counter = 0;
-        for (FeedItem item : queue) {
-            if (item.hasMedia() && !item.getMedia().isDownloaded()
-                    && !item.getMedia().isPlaying()
-                    && item.getFeed().getPreferences().getAutoDownload()) {
-                counter++;
-            }
-        }
-        for (FeedItem item : unreadItems) {
-            if (item.hasMedia() && !item.getMedia().isDownloaded()
-                    && item.getFeed().getPreferences().getAutoDownload()) {
-                counter++;
-            }
-        }
-        return counter;
-    }
-
     /**
      * Looks for undownloaded episodes in the queue or list of unread items and request a download if
      * 1. Network is available
@@ -459,6 +379,7 @@ public final class DBTasks {
      * @return A Future that can be used for waiting for the methods completion.
      */
     public static Future<?> autodownloadUndownloadedItems(final Context context, final long... mediaIds) {
+        Log.d(TAG, "autodownloadUndownloadedItems");
         return autodownloadExec.submit(ClientConfig.dbTasksCallbacks.getAutomaticDownloadAlgorithm()
                 .autoDownloadUndownloadedItems(context, mediaIds));
 
@@ -475,14 +396,6 @@ public final class DBTasks {
     public static void performAutoCleanup(final Context context) {
         ClientConfig.dbTasksCallbacks.getEpisodeCacheCleanupAlgorithm().performCleanup(context,
                 ClientConfig.dbTasksCallbacks.getEpisodeCacheCleanupAlgorithm().getDefaultCleanupParameter(context));
-    }
-
-    /**
-     * Adds all FeedItem objects whose 'read'-attribute is false to the queue in a separate thread.
-     */
-    public static void enqueueAllNewItems(final Context context) {
-        long[] unreadItems = DBReader.getUnreadItemIds(context);
-        DBWriter.addQueueItem(context, unreadItems);
     }
 
     /**
@@ -523,8 +436,8 @@ public final class DBTasks {
      * @param feedItemId ID of the FeedItem
      */
     public static boolean isInQueue(Context context, final long feedItemId) {
-        List<Long> queue = DBReader.getQueueIDList(context);
-        return QueueAccess.IDListAccess(queue).contains(feedItemId);
+        LongList queue = DBReader.getQueueIDList(context);
+        return queue.contains(feedItemId);
     }
 
     private static Feed searchFeedByIdentifyingValueOrID(Context context, PodDBAdapter adapter,
@@ -559,7 +472,7 @@ public final class DBTasks {
     /**
      * Adds new Feeds to the database or updates the old versions if they already exists. If another Feed with the same
      * identifying value already exists, this method will add new FeedItems from the new Feed to the existing Feed.
-     * These FeedItems will be marked as unread.
+     * These FeedItems will be marked as unread with the exception of the most recent FeedItem.
      * <p/>
      * This method can update multiple feeds at once. Submitting a feed twice in the same method call can result in undefined behavior.
      * <p/>
@@ -585,39 +498,38 @@ public final class DBTasks {
             final Feed savedFeed = searchFeedByIdentifyingValueOrID(context, adapter,
                     newFeed);
             if (savedFeed == null) {
-                if (BuildConfig.DEBUG)
-                    Log.d(TAG,
-                            "Found no existing Feed with title "
-                                    + newFeed.getTitle() + ". Adding as new one."
-                    );
+                Log.d(TAG, "Found no existing Feed with title "
+                                + newFeed.getTitle() + ". Adding as new one.");
+
                 // Add a new Feed
+                // all new feeds will have the most recent item marked as unplayed
+                FeedItem mostRecent = newFeed.getMostRecentItem();
+                if (mostRecent != null) {
+                    mostRecent.setNew();
+                }
+
                 newFeedsList.add(newFeed);
                 resultFeeds[feedIdx] = newFeed;
             } else {
-                if (BuildConfig.DEBUG)
-                    Log.d(TAG, "Feed with title " + newFeed.getTitle()
+                Log.d(TAG, "Feed with title " + newFeed.getTitle()
                             + " already exists. Syncing new with existing one.");
 
                 Collections.sort(newFeed.getItems(), new FeedItemPubdateComparator());
 
-                final boolean markNewItemsAsUnread;
+                final boolean markNewItems;
                 if (newFeed.getPageNr() == savedFeed.getPageNr()) {
                     if (savedFeed.compareWithOther(newFeed)) {
-                        if (BuildConfig.DEBUG)
-                            Log.d(TAG,
-                                    "Feed has updated attribute values. Updating old feed's attributes");
+                        Log.d(TAG, "Feed has updated attribute values. Updating old feed's attributes");
                         savedFeed.updateFromOther(newFeed);
                     }
-                    markNewItemsAsUnread = true;
+                    markNewItems = true;
                 } else {
-                    if (BuildConfig.DEBUG)
-                        Log.d(TAG, "New feed has a higher page number. Merging without marking as unread");
-                    markNewItemsAsUnread = false;
+                    Log.d(TAG, "New feed has a higher page number. Merging without marking as unread");
+                    markNewItems = false;
                     savedFeed.setNextPageLink(newFeed.getNextPageLink());
                 }
                 if (savedFeed.getPreferences().compareWithOther(newFeed.getPreferences())) {
-                    if (BuildConfig.DEBUG)
-                        Log.d(TAG, "Feed has updated preferences. Updating old feed's preferences");
+                    Log.d(TAG, "Feed has updated preferences. Updating old feed's preferences");
                     savedFeed.getPreferences().updateFromOther(newFeed.getPreferences());
                 }
                 // Look for new or updated Items
@@ -627,11 +539,11 @@ public final class DBTasks {
                             item.getIdentifyingValue());
                     if (oldItem == null) {
                         // item is new
-                        final int i = idx;
                         item.setFeed(savedFeed);
-                        savedFeed.getItems().add(i, item);
-                        if (markNewItemsAsUnread) {
-                            item.setRead(false);
+                        item.setAutoDownload(savedFeed.getPreferences().getAutoDownload());
+                        savedFeed.getItems().add(idx, item);
+                        if (markNewItems) {
+                            item.setNew();
                         }
                     } else {
                         oldItem.updateFromOther(item);
@@ -640,6 +552,7 @@ public final class DBTasks {
                 // update attributes
                 savedFeed.setLastUpdate(newFeed.getLastUpdate());
                 savedFeed.setType(newFeed.getType());
+                savedFeed.setLastUpdateFailed(false);
 
                 updatedFeedsList.add(savedFeed);
                 resultFeeds[feedIdx] = savedFeed;

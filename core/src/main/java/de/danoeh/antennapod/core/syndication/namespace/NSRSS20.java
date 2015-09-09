@@ -1,14 +1,16 @@
 package de.danoeh.antennapod.core.syndication.namespace;
 
 import android.util.Log;
+
+import org.xml.sax.Attributes;
+
 import de.danoeh.antennapod.core.BuildConfig;
 import de.danoeh.antennapod.core.feed.FeedImage;
 import de.danoeh.antennapod.core.feed.FeedItem;
 import de.danoeh.antennapod.core.feed.FeedMedia;
 import de.danoeh.antennapod.core.syndication.handler.HandlerState;
-import de.danoeh.antennapod.core.syndication.util.SyndDateUtils;
 import de.danoeh.antennapod.core.syndication.util.SyndTypeUtils;
-import org.xml.sax.Attributes;
+import de.danoeh.antennapod.core.util.DateUtils;
 
 /**
  * SAX-Parser for reading RSS-Feeds
@@ -55,6 +57,10 @@ public class NSRSS20 extends Namespace {
 				long size = 0;
 				try {
 					size = Long.parseLong(attributes.getValue(ENC_LEN));
+					if(size < 16384) {
+						// less than 16kb is suspicious, check manually
+						size = 0;
+					}
 				} catch (NumberFormatException e) {
 					if (BuildConfig.DEBUG)
 						Log.d(TAG, "Length attribute could not be parsed.");
@@ -129,7 +135,7 @@ public class NSRSS20 extends Namespace {
 				}
 			} else if (top.equals(PUBDATE) && second.equals(ITEM)) {
 				state.getCurrentItem().setPubDate(
-						SyndDateUtils.parseRFC822Date(content));
+						DateUtils.parse(content));
 			} else if (top.equals(URL) && second.equals(IMAGE) && third != null
 					&& third.equals(CHANNEL)) {
 				state.getFeed().getImage().setDownload_url(content);

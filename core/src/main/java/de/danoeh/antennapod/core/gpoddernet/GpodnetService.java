@@ -1,8 +1,5 @@
 package de.danoeh.antennapod.core.gpoddernet;
 
-import android.os.Build;
-import android.util.Log;
-
 import com.squareup.okhttp.Credentials;
 import com.squareup.okhttp.MediaType;
 import com.squareup.okhttp.OkHttpClient;
@@ -25,26 +22,16 @@ import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
-import java.security.KeyStore;
-import java.security.Principal;
-import java.security.cert.CertificateException;
-import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.Map;
-
-import javax.net.ssl.SSLContext;
-import javax.net.ssl.SSLSocketFactory;
-import javax.net.ssl.TrustManager;
-import javax.net.ssl.TrustManagerFactory;
-import javax.net.ssl.X509TrustManager;
-import javax.security.auth.x500.X500Principal;
 
 import de.danoeh.antennapod.core.ClientConfig;
 import de.danoeh.antennapod.core.gpoddernet.model.GpodnetDevice;
+import de.danoeh.antennapod.core.gpoddernet.model.GpodnetEpisodeAction;
+import de.danoeh.antennapod.core.gpoddernet.model.GpodnetEpisodeActionGetResponse;
+import de.danoeh.antennapod.core.gpoddernet.model.GpodnetEpisodeActionPostResponse;
 import de.danoeh.antennapod.core.gpoddernet.model.GpodnetPodcast;
 import de.danoeh.antennapod.core.gpoddernet.model.GpodnetSubscriptionChange;
 import de.danoeh.antennapod.core.gpoddernet.model.GpodnetTag;
@@ -72,82 +59,7 @@ public class GpodnetService {
 
     public GpodnetService() {
         httpClient = AntennapodHttpClient.getHttpClient();
-        if (Build.VERSION.SDK_INT <= 10) {
-            Log.d(TAG, "Use custom SSL factory");
-            SSLSocketFactory factory = getCustomSslSocketFactory();
-            httpClient.setSslSocketFactory(factory);
-        }
         BASE_HOST = GpodnetPreferences.getHostname();
-    }
-
-    private synchronized static SSLSocketFactory getCustomSslSocketFactory() {
-        try {
-            TrustManagerFactory defaultTrustManagerFactory = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
-            defaultTrustManagerFactory.init((KeyStore) null); // use system keystore
-            final X509TrustManager defaultTrustManager = (X509TrustManager) defaultTrustManagerFactory.getTrustManagers()[0];
-            TrustManager[] customTrustManagers = new TrustManager[]{new X509TrustManager() {
-                @Override
-                public java.security.cert.X509Certificate[] getAcceptedIssuers() {
-                    return null;
-                }
-                @Override
-                public void checkClientTrusted(java.security.cert.X509Certificate[] chain, String authType) throws CertificateException {
-                }
-                @Override
-                public void checkServerTrusted(X509Certificate[] chain, String authType)
-                        throws CertificateException {
-                    // chain may out of order - construct data structures to walk from server certificate to root certificate
-                    Map<Principal, X509Certificate> certificates = new HashMap<Principal, X509Certificate>(chain.length - 1);
-                    X509Certificate subject = null;
-                    for (X509Certificate cert : chain) {
-                        cert.checkValidity();
-                        if (cert.getSubjectDN().toString().startsWith("CN=" + DEFAULT_BASE_HOST)) {
-                            subject = cert;
-                        } else {
-                            certificates.put(cert.getSubjectDN(), cert);
-                        }
-                    }
-                    if (subject == null) {
-                        throw new CertificateException("Chain does not contain a certificate for " + DEFAULT_BASE_HOST);
-                    }
-                    // follow chain to root CA
-                    while (certificates.get(subject.getIssuerDN()) != null) {
-                        subject.checkValidity();
-                        X509Certificate issuer = certificates.get(subject.getIssuerDN());
-                        try {
-                            subject.verify(issuer.getPublicKey());
-                        } catch (Exception e) {
-                            Log.d(TAG, "failed: " + issuer.getSubjectDN() + " -> " + subject.getSubjectDN());
-                            throw new CertificateException("Could not verify certificate");
-                        }
-                        subject = issuer;
-                    }
-                    X500Principal rootAuthority = subject.getIssuerX500Principal();
-                    boolean accepted = false;
-                    for (X509Certificate cert :
-                            defaultTrustManager.getAcceptedIssuers()) {
-                        if (cert.getSubjectX500Principal().equals(rootAuthority)) {
-                            try {
-                                subject.verify(cert.getPublicKey());
-                                accepted = true;
-                            } catch (Exception e) {
-                                Log.d(TAG, "failed: " + cert.getSubjectDN() + " -> " + subject.getSubjectDN());
-                                throw new CertificateException("Could not verify root certificate");
-                            }
-                        }
-                    }
-                    if (accepted == false) {
-                        throw new CertificateException("Could not verify root certificate");
-                    }
-                }
-            }};
-            SSLContext sslContext = SSLContext.getInstance("TLS");
-            sslContext.init(null, customTrustManagers, null);
-            return sslContext.getSocketFactory();
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-        return null;
     }
 
     /**
@@ -172,9 +84,10 @@ public class GpodnetService {
                     jsonTagList.length());
             for (int i = 0; i < jsonTagList.length(); i++) {
                 JSONObject jObj = jsonTagList.getJSONObject(i);
-                String name = jObj.getString("tag");
+                String title = jObj.getString("title");
+                String tag = jObj.getString("tag");
                 int usage = jObj.getInt("usage");
-                tagList.add(new GpodnetTag(name, usage));
+                tagList.add(new GpodnetTag(title, tag, usage));
             }
             return tagList;
         } catch (JSONException e) {
@@ -194,7 +107,7 @@ public class GpodnetService {
 
         try {
             URL url = new URI(BASE_SCHEME, BASE_HOST, String.format(
-                    "/api/2/tag/%s/%d.json", tag.getName(), count), null).toURL();
+                    "/api/2/tag/%s/%d.json", tag.getTag(), count), null).toURL();
             Request.Builder request = new Request.Builder().url(url);
             String response = executeRequest(request);
 
@@ -536,6 +449,85 @@ public class GpodnetService {
     }
 
     /**
+     * Updates the episode actions
+     * <p/>
+     * This method requires authentication.
+     *
+     * @param episodeActions    Collection of episode actions.
+     * @return a GpodnetUploadChangesResponse. See {@link de.danoeh.antennapod.core.gpoddernet.model.GpodnetUploadChangesResponse}
+     * for details.
+     * @throws java.lang.IllegalArgumentException                           if username, deviceId, added or removed is null.
+     * @throws de.danoeh.antennapod.core.gpoddernet.GpodnetServiceException if added or removed contain duplicates or if there
+     *                                                                      is an authentication error.
+     */
+    public GpodnetEpisodeActionPostResponse uploadEpisodeActions(Collection<GpodnetEpisodeAction> episodeActions)
+            throws GpodnetServiceException {
+
+        Validate.notNull(episodeActions);
+
+        String username = GpodnetPreferences.getUsername();
+
+        try {
+            URL url = new URI(BASE_SCHEME, BASE_HOST, String.format(
+                    "/api/2/episodes/%s.json", username), null).toURL();
+
+            final JSONArray list = new JSONArray();
+            for(GpodnetEpisodeAction episodeAction : episodeActions) {
+                JSONObject obj = episodeAction.writeToJSONObject();
+                if(obj != null) {
+                    list.put(obj);
+                }
+            }
+
+            RequestBody body = RequestBody.create(JSON, list.toString());
+            Request.Builder request = new Request.Builder().post(body).url(url);
+
+            final String response = executeRequest(request);
+            return GpodnetEpisodeActionPostResponse.fromJSONObject(response);
+        } catch (JSONException | MalformedURLException | URISyntaxException e) {
+            e.printStackTrace();
+            throw new GpodnetServiceException(e);
+        }
+
+    }
+
+    /**
+     * Returns all subscription changes of a specific device.
+     * <p/>
+     * This method requires authentication.
+     *
+     * @param timestamp A timestamp that can be used to receive all changes since a
+     *                  specific point in time.
+     * @throws IllegalArgumentException              If username or deviceId is null.
+     * @throws GpodnetServiceAuthenticationException If there is an authentication error.
+     */
+    public GpodnetEpisodeActionGetResponse getEpisodeChanges(long timestamp) throws GpodnetServiceException {
+
+        String username = GpodnetPreferences.getUsername();
+
+        String params = String.format("since=%d", timestamp);
+        String path = String.format("/api/2/episodes/%s.json",
+                username);
+        try {
+            URL url = new URI(BASE_SCHEME, null, BASE_HOST, -1, path, params,
+                    null).toURL();
+            Request.Builder request = new Request.Builder().url(url);
+
+            String response = executeRequest(request);
+            JSONObject json = new JSONObject(response);
+            return readEpisodeActionsFromJSONObject(json);
+        } catch (URISyntaxException e) {
+            e.printStackTrace();
+            throw new IllegalStateException(e);
+        } catch (JSONException | MalformedURLException e) {
+            e.printStackTrace();
+            throw new GpodnetServiceException(e);
+        }
+
+    }
+
+
+    /**
      * Logs in a specific user. This method must be called if any of the methods
      * that require authentication is used.
      *
@@ -554,7 +546,8 @@ public class GpodnetService {
             e.printStackTrace();
             throw new GpodnetServiceException(e);
         }
-        Request.Builder request = new Request.Builder().url(url).post(null);
+        RequestBody body = RequestBody.create(TEXT, "");
+        Request.Builder request = new Request.Builder().url(url).post(body);
         executeRequestWithAuthentication(request, username, password);
     }
 
@@ -643,7 +636,12 @@ public class GpodnetService {
         Validate.notNull(body);
 
         ByteArrayOutputStream outputStream;
-        int contentLength = (int) body.contentLength();
+        int contentLength = 0;
+        try {
+            contentLength = (int) body.contentLength();
+        } catch (IOException ignore) {
+            // ignore
+        }
         if (contentLength > 0) {
             outputStream = new ByteArrayOutputStream(contentLength);
         } else {
@@ -772,4 +770,24 @@ public class GpodnetService {
         long timestamp = object.getLong("timestamp");
         return new GpodnetSubscriptionChange(added, removed, timestamp);
     }
+
+    private GpodnetEpisodeActionGetResponse readEpisodeActionsFromJSONObject(
+            JSONObject object) throws JSONException {
+        Validate.notNull(object);
+
+        List<GpodnetEpisodeAction> episodeActions = new ArrayList<GpodnetEpisodeAction>();
+
+        long timestamp = object.getLong("timestamp");
+        JSONArray jsonActions = object.getJSONArray("actions");
+        for(int i=0; i < jsonActions.length(); i++) {
+            JSONObject jsonAction = jsonActions.getJSONObject(i);
+            GpodnetEpisodeAction episodeAction = GpodnetEpisodeAction.readFromJSONObject(jsonAction);
+            if(episodeAction != null) {
+                episodeActions.add(episodeAction);
+            }
+        }
+        return new GpodnetEpisodeActionGetResponse(episodeActions, timestamp);
+    }
+
+
 }

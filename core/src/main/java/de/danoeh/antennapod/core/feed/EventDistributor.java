@@ -5,8 +5,6 @@ import android.util.Log;
 
 import org.apache.commons.lang3.Validate;
 
-import de.danoeh.antennapod.core.BuildConfig;
-
 import java.util.AbstractQueue;
 import java.util.Observable;
 import java.util.Observer;
@@ -26,11 +24,11 @@ public class EventDistributor extends Observable {
 
 	public static final int FEED_LIST_UPDATE = 1;
 	public static final int UNREAD_ITEMS_UPDATE = 2;
-	public static final int QUEUE_UPDATE = 4;
 	public static final int DOWNLOADLOG_UPDATE = 8;
 	public static final int PLAYBACK_HISTORY_UPDATE = 16;
 	public static final int DOWNLOAD_QUEUED = 32;
 	public static final int DOWNLOAD_HANDLED = 64;
+    public static final int PLAYER_STATUS_UPDATE = 128;
 
 	private Handler handler;
 	private AbstractQueue<Integer> events;
@@ -70,23 +68,17 @@ public class EventDistributor extends Observable {
 
 	private void processEventQueue() {
 		Integer result = 0;
-		if (BuildConfig.DEBUG)
-			Log.d(TAG,
-					"Processing event queue. Number of events: "
-							+ events.size());
+		Log.d(TAG, "Processing event queue. Number of events: " + events.size());
 		for (Integer current = events.poll(); current != null; current = events
 				.poll()) {
 			result |= current;
 		}
 		if (result != 0) {
-			if (BuildConfig.DEBUG)
-				Log.d(TAG, "Notifying observers. Data: " + result);
+			Log.d(TAG, "Notifying observers. Data: " + result);
 			setChanged();
 			notifyObservers(result);
 		} else {
-			if (BuildConfig.DEBUG)
-				Log.d(TAG,
-						"Event queue didn't contain any new events. Observers will not be notified.");
+			Log.d(TAG, "Event queue didn't contain any new events. Observers will not be notified.");
 		}
 	}
 
@@ -104,10 +96,6 @@ public class EventDistributor extends Observable {
 		addEvent(UNREAD_ITEMS_UPDATE);
 	}
 
-	public void sendQueueUpdateBroadcast() {
-		addEvent(QUEUE_UPDATE);
-	}
-
 	public void sendFeedUpdateBroadcast() {
 		addEvent(FEED_LIST_UPDATE);
 	}
@@ -123,6 +111,10 @@ public class EventDistributor extends Observable {
 	public void sendDownloadHandledBroadcast() {
 		addEvent(DOWNLOAD_HANDLED);
 	}
+
+    public void sendPlayerStatusUpdateBroadcast() {
+        addEvent(PLAYER_STATUS_UPDATE);
+    }
 
 	public static abstract class EventListener implements Observer {
 

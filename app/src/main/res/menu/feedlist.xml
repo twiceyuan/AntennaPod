@@ -3,11 +3,24 @@
       xmlns:custom="http://schemas.android.com/apk/res-auto">
 
     <item
+        android:id="@+id/hide_items"
+        android:icon="?attr/ic_filter"
+        android:menuCategory="container"
+        android:title="@string/hide_episodes_title"
+        custom:showAsAction="always">
+    </item>
+    <item
+        android:id="@+id/episode_actions"
+        android:menuCategory="container"
+        android:title="@string/episode_actions"
+        custom:showAsAction="always">
+    </item>
+    <item
         android:id="@+id/refresh_item"
         android:icon="?attr/navigation_refresh"
         android:menuCategory="container"
         android:title="@string/refresh_label"
-        custom:showAsAction="ifRoom">
+        custom:showAsAction="always">
     </item>
     <item
         android:id="@+id/refresh_complete_item"
@@ -15,12 +28,14 @@
         android:title="@string/load_complete_feed"
         custom:showAsAction="collapseActionView">
     </item>
+
     <item
-        android:id="@+id/mark_all_read_item"
-        android:menuCategory="container"
-        android:title="@string/mark_all_read_label"
-        custom:showAsAction="collapseActionView">
-    </item>
+        android:id="@+id/action_search"
+        android:icon="?attr/action_search"
+        custom:showAsAction="always"
+        custom:actionViewClass="android.support.v7.widget.SearchView"
+        android:title="@string/search_label"/>
+
     <item
         android:id="@+id/support_item"
         android:menuCategory="container"
@@ -28,6 +43,28 @@
         android:visible="false"
         custom:showAsAction="collapseActionView">
     </item>
+
+    <item
+        android:id="@+id/visit_website_item"
+        android:icon="?attr/location_web_site"
+        android:menuCategory="container"
+        custom:showAsAction="collapseActionView"
+        android:title="@string/visit_website_label"
+        android:visible="true">
+    </item>
+    <item
+        android:id="@+id/share_link_item"
+        android:menuCategory="container"
+        custom:showAsAction="collapseActionView"
+        android:title="@string/share_link_label">
+    </item>
+    <item
+        android:id="@+id/share_download_url_item"
+        android:menuCategory="container"
+        custom:showAsAction="collapseActionView"
+        android:title="@string/share_feed_url_label">
+    </item>
+
     <item
         android:id="@+id/remove_item"
         android:icon="?attr/content_discard"

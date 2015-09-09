@@ -5,12 +5,8 @@ import android.content.Context;
 import android.graphics.Bitmap;
 import android.os.Build;
 
-import de.danoeh.antennapod.R;
-import de.danoeh.antennapod.core.feed.*;
-import de.danoeh.antennapod.core.storage.PodDBAdapter;
-import de.test.antennapod.util.service.download.HTTPBin;
-import de.test.antennapod.util.syndication.feedgenerator.RSS2Generator;
 import junit.framework.Assert;
+
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -22,6 +18,18 @@ import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+
+import de.danoeh.antennapod.R;
+import de.danoeh.antennapod.core.feed.EventDistributor;
+import de.danoeh.antennapod.core.feed.Feed;
+import de.danoeh.antennapod.core.feed.FeedImage;
+import de.danoeh.antennapod.core.feed.FeedItem;
+import de.danoeh.antennapod.core.feed.FeedMedia;
+import de.danoeh.antennapod.core.feed.QueueEvent;
+import de.danoeh.antennapod.core.storage.PodDBAdapter;
+import de.greenrobot.event.EventBus;
+import de.test.antennapod.util.service.download.HTTPBin;
+import de.test.antennapod.util.syndication.feedgenerator.RSS2Generator;
 
 /**
  * Utility methods for UI tests.
@@ -103,6 +111,9 @@ public class UITestUtils {
 
     private File newMediaFile(String name) throws IOException {
         File mediaFile = new File(hostedMediaDir, name);
+        if(mediaFile.exists()) {
+            mediaFile.delete();
+        }
         Assert.assertFalse(mediaFile.exists());
 
         InputStream in = context.getAssets().open("testfile.mp3");
@@ -133,11 +144,12 @@ public class UITestUtils {
             // create items
             List<FeedItem> items = new ArrayList<FeedItem>();
             for (int j = 0; j < NUM_ITEMS_PER_FEED; j++) {
-                FeedItem item = new FeedItem(0, "item" + j, "item" + j, "http://example.com/feed" + i + "/item/" + j, new Date(), true, feed);
+                FeedItem item = new FeedItem(j, "Feed " + (i+1) + ": Item " + (j+1), "item" + j,
+                        "http://example.com/feed" + i + "/item/" + j, new Date(), FeedItem.UNPLAYED, feed);
                 items.add(item);
 
                 File mediaFile = newMediaFile("feed-" + i + "-episode-" + j + ".mp3");
-                item.setMedia(new FeedMedia(0, item, 0, 0, mediaFile.length(), "audio/mp3", null, hostFile(mediaFile), false, null, 0));
+                item.setMedia(new FeedMedia(j, item, 0, 0, mediaFile.length(), "audio/mp3", null, hostFile(mediaFile), false, null, 0));
 
             }
             feed.setItems(items);
@@ -161,7 +173,9 @@ public class UITestUtils {
      * @param downloadEpisodes true if episodes should also be marked as downloaded.
      */
     public void addLocalFeedData(boolean downloadEpisodes) throws Exception {
-        if (localFeedDataAdded) throw new IllegalStateException("addLocalFeedData was called twice on the same instance");
+        if (localFeedDataAdded) {
+            throw new IllegalStateException("addLocalFeedData was called twice on the same instance");
+        }
         if (!feedDataHosted) {
             addHostedFeedData();
         }
@@ -174,7 +188,8 @@ public class UITestUtils {
             feed.setDownloaded(true);
             if (feed.getImage() != null) {
                 FeedImage image = feed.getImage();
-                image.setFile_url(image.getDownload_url());
+                int fileId = Integer.parseInt(StringUtils.substringAfter(image.getDownload_url(), "files/"));
+                image.setFile_url(server.accessFile(fileId).getAbsolutePath());
                 image.setDownloaded(true);
             }
             if (downloadEpisodes) {
@@ -195,6 +210,6 @@ public class UITestUtils {
         adapter.setQueue(queue);
         adapter.close();
         EventDistributor.getInstance().sendFeedUpdateBroadcast();
-        EventDistributor.getInstance().sendQueueUpdateBroadcast();
+        EventBus.getDefault().post(new QueueEvent(QueueEvent.Action.ADDED_ITEMS, queue));
     }
 }

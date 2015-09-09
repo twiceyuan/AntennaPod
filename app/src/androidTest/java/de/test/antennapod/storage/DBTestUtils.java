@@ -47,11 +47,11 @@ public class DBTestUtils {
         adapter.open();
         for (int i = 0; i < numFeeds; i++) {
             Feed f = new Feed(0, new Date(), "feed " + i, "link" + i, "descr", null, null,
-                    null, null, "id" + i, null, null, "url" + i, false, new FlattrStatus(), false, null);
+                    null, null, "id" + i, null, null, "url" + i, false, new FlattrStatus(), false, null, null, false);
             f.setItems(new ArrayList<FeedItem>());
             for (int j = 0; j < numItems; j++) {
                 FeedItem item = new FeedItem(0, "item " + j, "id" + j, "link" + j, new Date(),
-                        true, f, withChapters);
+                        FeedItem.PLAYED, f, withChapters);
                 if (withMedia) {
                     FeedMedia media = new FeedMedia(item, "url" + j, 1, "audio/mp3");
                     item.setMedia(media);
