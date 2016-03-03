@@ -8,20 +8,12 @@ import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
-import android.view.View.OnClickListener;
 import android.widget.Button;
 import android.widget.TextView;
-
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.InputStreamReader;
-import java.io.Reader;
 
 import de.danoeh.antennapod.R;
 import de.danoeh.antennapod.core.preferences.UserPreferences;
 import de.danoeh.antennapod.core.util.IntentUtils;
-import de.danoeh.antennapod.core.util.LangUtils;
 import de.danoeh.antennapod.core.util.StorageUtils;
 
 /**
@@ -51,23 +43,13 @@ public class OpmlImportFromPathActivity extends OpmlImportBaseActivity {
         final TextView txtvHeaderExplanation3 = (TextView) findViewById(R.id.txtvHeadingExplanation3);
 
         Button butChooseFilesystem = (Button) findViewById(R.id.butChooseFileFromFilesystem);
-        butChooseFilesystem.setOnClickListener(new OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                chooseFileFromFilesystem();
-            }
-
-        });
+        butChooseFilesystem.setOnClickListener(v -> chooseFileFromFilesystem());
 
         Button butChooseExternal = (Button) findViewById(R.id.butChooseFileFromExternal);
-        butChooseExternal.setOnClickListener(new OnClickListener() {
-                @Override
-                public void onClick(View v) {
-                    chooseFileFromExternal();
-                }
-        });
+        butChooseExternal.setOnClickListener(v -> chooseFileFromExternal());
 
-                int nextOption = 1;
+        int nextOption = 1;
+        String optionLabel = getString(R.string.opml_import_option);
         intentPickAction = new Intent(Intent.ACTION_PICK);
         intentPickAction.setData(Uri.parse("file://"));
 
@@ -81,7 +63,7 @@ public class OpmlImportFromPathActivity extends OpmlImportBaseActivity {
             }
         }
         if(txtvExplanation1.getVisibility() == View.VISIBLE) {
-            txtvHeaderExplanation1.setText("Option " + nextOption);
+            txtvHeaderExplanation1.setText(String.format(optionLabel, nextOption));
             nextOption++;
         }
 
@@ -94,11 +76,11 @@ public class OpmlImportFromPathActivity extends OpmlImportBaseActivity {
             findViewById(R.id.divider2).setVisibility(View.GONE);
             butChooseExternal.setVisibility(View.GONE);
         } else {
-            txtvHeaderExplanation2.setText("Option " + nextOption);
+            txtvHeaderExplanation2.setText(String.format(optionLabel, nextOption));
             nextOption++;
         }
 
-        txtvHeaderExplanation3.setText("Option " + nextOption);
+        txtvHeaderExplanation3.setText(String.format(optionLabel, nextOption));
     }
 
     @Override
@@ -122,19 +104,6 @@ public class OpmlImportFromPathActivity extends OpmlImportBaseActivity {
                 return true;
             default:
                 return false;
-        }
-    }
-
-    private void startImport(File file) {
-        Reader mReader = null;
-        try {
-            mReader = new InputStreamReader(new FileInputStream(file),
-                LangUtils.UTF_8);
-            Log.d(TAG, "Parsing " + file.toString());
-            startImport(mReader);
-        } catch (FileNotFoundException e) {
-            Log.d(TAG, "File not found which really should be there");
-            // this should never happen as it is a file we have just chosen
         }
     }
 
@@ -166,13 +135,7 @@ public class OpmlImportFromPathActivity extends OpmlImportBaseActivity {
         super.onActivityResult(requestCode, resultCode, data);
         if (resultCode == RESULT_OK && requestCode == CHOOSE_OPML_FILE) {
             Uri uri = data.getData();
-
-            try {
-                Reader mReader = new InputStreamReader(getContentResolver().openInputStream(uri), LangUtils.UTF_8);
-                startImport(mReader);
-            } catch (FileNotFoundException e) {
-                Log.d(TAG, "File not found");
-            }
+            importUri(uri);
         }
     }
 

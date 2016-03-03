@@ -17,7 +17,7 @@
         android:layout_centerVertical="true"
         android:adjustViewBounds="true"
         android:cropToPadding="true"
-        android:scaleType="fitXY"
+        android:scaleType="centerCrop"
         android:layout_marginTop="4dp"
         android:layout_marginBottom="4dp"
         android:layout_marginLeft="@dimen/listitem_icon_leftpadding"
@@ -37,7 +37,7 @@
         tools:text="23"
         tools:background="@android:color/holo_green_dark"/>
 
-    <IconTextView
+    <com.joanzapata.iconify.widget.IconTextView
         android:id="@+id/itxtvFailure"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"

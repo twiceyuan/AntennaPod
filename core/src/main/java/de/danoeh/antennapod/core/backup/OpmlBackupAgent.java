@@ -89,7 +89,7 @@ public class OpmlBackupAgent extends BackupAgentHelper {
 
             try {
                 // Write OPML
-                new OpmlWriter().writeDocument(DBReader.getFeedList(mContext), writer);
+                new OpmlWriter().writeDocument(DBReader.getFeedList(), writer);
 
                 // Compare checksum of new and old file to see if we need to perform a backup at all
                 if (digester != null) {
@@ -156,10 +156,9 @@ public class OpmlBackupAgent extends BackupAgentHelper {
                 ArrayList<OpmlElement> opmlElements = new OpmlReader().readDocument(reader);
                 mChecksum = digester == null ? null : digester.digest();
                 DownloadRequester downloader = DownloadRequester.getInstance();
-                Date lastUpdated = new Date();
 
                 for (OpmlElement opmlElem : opmlElements) {
-                    Feed feed = new Feed(opmlElem.getXmlUrl(), lastUpdated, opmlElem.getText());
+                    Feed feed = new Feed(opmlElem.getXmlUrl(), null, opmlElem.getText());
 
                     try {
                         downloader.downloadFeed(mContext, feed);

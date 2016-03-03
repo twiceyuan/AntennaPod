@@ -1,16 +1,21 @@
 package de.danoeh.antennapod.core.service.download;
 
-import android.support.annotation.NonNull;
 import android.os.Build;
+import android.support.annotation.NonNull;
 import android.util.Log;
 
 import com.squareup.okhttp.OkHttpClient;
+import com.squareup.okhttp.Request;
+import com.squareup.okhttp.Response;
+import com.squareup.okhttp.internal.http.StatusLine;
 
 import java.io.IOException;
 import java.net.CookieManager;
 import java.net.CookiePolicy;
+import java.net.HttpURLConnection;
 import java.net.InetAddress;
 import java.net.Socket;
+import java.net.URL;
 import java.security.GeneralSecurityException;
 import java.util.concurrent.TimeUnit;
 
@@ -18,7 +23,7 @@ import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
 
-import de.danoeh.antennapod.core.BuildConfig;
+import de.danoeh.antennapod.core.storage.DBWriter;
 
 /**
  * Provides access to a HttpClient singleton.
@@ -59,6 +64,33 @@ public class AntennapodHttpClient {
         System.setProperty("http.maxConnections", String.valueOf(MAX_CONNECTIONS));
 
         OkHttpClient client = new OkHttpClient();
+
+        // detect 301 Moved permanently and 308 Permanent Redirect
+        client.networkInterceptors().add(chain -> {
+            Request request = chain.request();
+            Response response = chain.proceed(request);
+            if(response.code() == HttpURLConnection.HTTP_MOVED_PERM ||
+                    response.code() == StatusLine.HTTP_PERM_REDIRECT) {
+                String location = response.header("Location");
+                if(location.startsWith("/")) { // URL is not absolute, but relative
+                    URL url = request.url();
+                    location = url.getProtocol() + "://" + url.getHost() + location;
+                } else if(!location.toLowerCase().startsWith("http://") &&
+                        !location.toLowerCase().startsWith("https://")) {
+                    // Reference is relative to current path
+                    URL url = request.url();
+                    String path = url.getPath();
+                    String newPath = path.substring(0, path.lastIndexOf("/") + 1) + location;
+                    location = url.getProtocol() + "://" + url.getHost() + newPath;
+                }
+                try {
+                    DBWriter.updateFeedDownloadURL(request.urlString(), location).get();
+                } catch (Exception e) {
+                    Log.e(TAG, Log.getStackTraceString(e));
+                }
+            }
+            return response;
+        });
 
         // set cookie handler
         CookieManager cm = new CookieManager();
@@ -151,7 +183,7 @@ public class AntennapodHttpClient {
         }
 
         private void configureSocket(SSLSocket s) {
-            s.setEnabledProtocols(new String[] { "TLSv1.2", "TLSv1.1" } );
+            s.setEnabledProtocols(new String[] { "TLSv1.2", "TLSv1.1", "TLSv1" } );
         }
 
     }

@@ -1,17 +1,21 @@
 package de.danoeh.antennapod.core.feed;
 
+import android.database.Cursor;
 import android.net.Uri;
 
 import org.apache.commons.lang3.builder.ToStringBuilder;
 import org.apache.commons.lang3.builder.ToStringStyle;
 
 import java.util.Date;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.Callable;
+import java.util.concurrent.TimeUnit;
 
-import de.danoeh.antennapod.core.ClientConfig;
 import de.danoeh.antennapod.core.asynctask.ImageResource;
 import de.danoeh.antennapod.core.storage.DBReader;
+import de.danoeh.antennapod.core.storage.PodDBAdapter;
 import de.danoeh.antennapod.core.util.ShownotesProvider;
 import de.danoeh.antennapod.core.util.flattr.FlattrStatus;
 import de.danoeh.antennapod.core.util.flattr.FlattrThing;
@@ -22,6 +26,11 @@ import de.danoeh.antennapod.core.util.flattr.FlattrThing;
  * @author daniel
  */
 public class FeedItem extends FeedComponent implements ShownotesProvider, FlattrThing, ImageResource {
+
+    /** tag that indicates this item is in the queue */
+    public static final String TAG_QUEUE = "Queue";
+    /** tag that indicates this item is in favorites */
+    public static final String TAG_FAVORITE = "Favorite";
 
     /**
      * The id/guid that can be found in the rss/atom feed. Might not be set.
@@ -67,7 +76,18 @@ public class FeedItem extends FeedComponent implements ShownotesProvider, Flattr
     private List<Chapter> chapters;
     private FeedImage image;
 
-    private boolean autoDownload = true;
+    /*
+     *   0: auto download disabled
+     *   1: auto download enabled (default)
+     * > 1: auto download enabled, (approx.) timestamp of the last failed attempt
+     *      where last digit denotes the number of failed attempts
+     */
+    private long autoDownload = 1;
+
+    /**
+     * Any tags assigned to this item
+     */
+    private Set<String> tags = new HashSet<>();
 
     public FeedItem() {
         this.state = UNPLAYED;
@@ -80,7 +100,7 @@ public class FeedItem extends FeedComponent implements ShownotesProvider, Flattr
      * */
     public FeedItem(long id, String title, String link, Date pubDate, String paymentLink, long feedId,
                     FlattrStatus flattrStatus, boolean hasChapters, FeedImage image, int state,
-                    String itemIdentifier, boolean autoDownload) {
+                    String itemIdentifier, long autoDownload) {
         this.id = id;
         this.title = title;
         this.link = link;
@@ -123,6 +143,37 @@ public class FeedItem extends FeedComponent implements ShownotesProvider, Flattr
         this.feed = feed;
         this.flattrStatus = new FlattrStatus();
         this.hasChapters = hasChapters;
+    }
+
+    public static FeedItem fromCursor(Cursor cursor) {
+        int indexId = cursor.getColumnIndex(PodDBAdapter.KEY_ID);
+        int indexTitle = cursor.getColumnIndex(PodDBAdapter.KEY_TITLE);
+        int indexLink = cursor.getColumnIndex(PodDBAdapter.KEY_LINK);
+        int indexPubDate = cursor.getColumnIndex(PodDBAdapter.KEY_PUBDATE);
+        int indexPaymentLink = cursor.getColumnIndex(PodDBAdapter.KEY_PAYMENT_LINK);
+        int indexFeedId = cursor.getColumnIndex(PodDBAdapter.KEY_FEED);
+        int indexFlattrStatus = cursor.getColumnIndex(PodDBAdapter.KEY_FLATTR_STATUS);
+        int indexHasChapters = cursor.getColumnIndex(PodDBAdapter.KEY_HAS_CHAPTERS);
+        int indexRead = cursor.getColumnIndex(PodDBAdapter.KEY_READ);
+        int indexItemIdentifier = cursor.getColumnIndex(PodDBAdapter.KEY_ITEM_IDENTIFIER);
+        int indexAutoDownload = cursor.getColumnIndex(PodDBAdapter.KEY_AUTO_DOWNLOAD);
+
+        long id = cursor.getInt(indexId);
+        assert(id > 0);
+        String title = cursor.getString(indexTitle);
+        String link = cursor.getString(indexLink);
+        Date pubDate = new Date(cursor.getLong(indexPubDate));
+        String paymentLink = cursor.getString(indexPaymentLink);
+        long feedId = cursor.getLong(indexFeedId);
+        boolean hasChapters = cursor.getInt(indexHasChapters) > 0;
+        FlattrStatus flattrStatus = new FlattrStatus(cursor.getLong(indexFlattrStatus));
+        int state = cursor.getInt(indexRead);
+        String itemIdentifier = cursor.getString(indexItemIdentifier);
+        long autoDownload = cursor.getLong(indexAutoDownload);
+
+        FeedItem item = new FeedItem(id, title, link, pubDate, paymentLink, feedId, flattrStatus,
+                hasChapters, null, state, itemIdentifier, autoDownload);
+        return item;
     }
 
     public void updateFromOther(FeedItem other) {
@@ -321,7 +372,7 @@ public class FeedItem extends FeedComponent implements ShownotesProvider, Flattr
             public String call() throws Exception {
 
                 if (contentEncoded == null || description == null) {
-                    DBReader.loadExtraInformationOfFeedItem(ClientConfig.applicationCallbacks.getApplicationInstance(), FeedItem.this);
+                    DBReader.loadExtraInformationOfFeedItem(FeedItem.this);
 
                 }
                 return (contentEncoded != null) ? contentEncoded : description;
@@ -405,19 +456,53 @@ public class FeedItem extends FeedComponent implements ShownotesProvider, Flattr
     }
 
     public void setAutoDownload(boolean autoDownload) {
-        this.autoDownload = autoDownload;
+        this.autoDownload = autoDownload ? 1 : 0;
     }
 
     public boolean getAutoDownload() {
-        return this.autoDownload;
+        return this.autoDownload > 0;
+    }
+
+    public int getFailedAutoDownloadAttempts() {
+        if (autoDownload <= 1) {
+            return 0;
+        }
+        int failedAttempts = (int)(autoDownload % 10);
+        if (failedAttempts == 0) {
+            failedAttempts = 10;
+        }
+        return failedAttempts;
     }
 
     public boolean isAutoDownloadable() {
-        return this.hasMedia() &&
-                false == this.getMedia().isPlaying() &&
-                false == this.getMedia().isDownloaded() &&
-                this.getAutoDownload();
+        if (media == null || media.isPlaying() || media.isDownloaded() || autoDownload == 0) {
+            return false;
+        }
+        if (autoDownload == 1) {
+            return true;
+        }
+        int failedAttempts = getFailedAutoDownloadAttempts();
+        double magicValue = 1.767; // 1.767^(10[=#maxNumAttempts]-1) = 168 hours / 7 days
+        int millisecondsInHour = 3600000;
+        long waitingTime = (long) (Math.pow(magicValue, failedAttempts - 1) * millisecondsInHour);
+        long grace = TimeUnit.MINUTES.toMillis(5);
+        return System.currentTimeMillis() > (autoDownload + waitingTime - grace);
     }
+
+    /**
+     * @return true if the item has this tag
+     */
+    public boolean isTagged(String tag) { return tags.contains(tag); }
+
+    /**
+     * @param tag adds this tag to the item. NOTE: does NOT persist to the database
+     */
+    public void addTag(String tag) { tags.add(tag); }
+
+    /**
+     * @param tag the to remove
+     */
+    public void removeTag(String tag) { tags.remove(tag); }
 
     @Override
     public String toString() {

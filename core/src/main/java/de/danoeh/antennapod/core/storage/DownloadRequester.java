@@ -3,19 +3,18 @@ package de.danoeh.antennapod.core.storage;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
+import android.support.annotation.NonNull;
+import android.text.TextUtils;
 import android.util.Log;
 import android.webkit.URLUtil;
 
 import org.apache.commons.io.FilenameUtils;
-import org.apache.commons.lang3.StringUtils;
-import org.apache.commons.lang3.Validate;
 
 import java.io.File;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 import de.danoeh.antennapod.core.BuildConfig;
-import de.danoeh.antennapod.core.feed.EventDistributor;
 import de.danoeh.antennapod.core.feed.Feed;
 import de.danoeh.antennapod.core.feed.FeedFile;
 import de.danoeh.antennapod.core.feed.FeedMedia;
@@ -72,10 +71,8 @@ public class DownloadRequester {
      *                call will return false.
      * @return True if the download request was accepted, false otherwise.
      */
-    public synchronized boolean download(Context context, DownloadRequest request) {
-        Validate.notNull(context);
-        Validate.notNull(request);
-
+    public synchronized boolean download(@NonNull Context context,
+                                         @NonNull DownloadRequest request) {
         if (downloads.containsKey(request.getSource())) {
             if (BuildConfig.DEBUG) Log.i(TAG, "DownloadRequest is already stored.");
             return false;
@@ -85,13 +82,13 @@ public class DownloadRequester {
         Intent launchIntent = new Intent(context, DownloadService.class);
         launchIntent.putExtra(DownloadService.EXTRA_REQUEST, request);
         context.startService(launchIntent);
-        EventDistributor.getInstance().sendDownloadQueuedBroadcast();
+
         return true;
     }
 
     private void download(Context context, FeedFile item, FeedFile container, File dest,
                           boolean overwriteIfExists, String username, String password,
-                          long ifModifiedSince, boolean deleteOnFailure, Bundle arguments) {
+                          String lastModified, boolean deleteOnFailure, Bundle arguments) {
         final boolean partiallyDownloadedFileExists = item.getFile_url() != null;
         if (isDownloadingFile(item)) {
                 Log.e(TAG, "URL " + item.getDownload_url()
@@ -132,7 +129,7 @@ public class DownloadRequester {
 
         DownloadRequest.Builder builder = new DownloadRequest.Builder(dest.toString(), item)
                 .withAuthentication(username, password)
-                .ifModifiedSince(ifModifiedSince)
+                .lastModified(lastModified)
                 .deleteOnFailure(deleteOnFailure)
                 .withArguments(arguments);
         DownloadRequest request = builder.build();
@@ -146,7 +143,7 @@ public class DownloadRequester {
     private boolean isFilenameAvailable(String path) {
         for (String key : downloads.keySet()) {
             DownloadRequest r = downloads.get(key);
-            if (StringUtils.equals(r.getDestination(), path)) {
+            if (TextUtils.equals(r.getDestination(), path)) {
                 if (BuildConfig.DEBUG)
                     Log.d(TAG, path
                             + " is already used by another requested download");
@@ -165,24 +162,25 @@ public class DownloadRequester {
      * @param feed Feed to download
      * @param loadAllPages Set to true to download all pages
      */
-    public synchronized void downloadFeed(Context context, Feed feed, boolean loadAllPages)
+    public synchronized void downloadFeed(Context context, Feed feed, boolean loadAllPages,
+                                          boolean force)
             throws DownloadRequestException {
         if (feedFileValid(feed)) {
             String username = (feed.getPreferences() != null) ? feed.getPreferences().getUsername() : null;
             String password = (feed.getPreferences() != null) ? feed.getPreferences().getPassword() : null;
-            long ifModifiedSince = feed.isPaged() ? 0 : feed.getLastUpdate().getTime();
+            String lastModified = feed.isPaged() || force ? null : feed.getLastUpdate();
 
             Bundle args = new Bundle();
             args.putInt(REQUEST_ARG_PAGE_NR, feed.getPageNr());
             args.putBoolean(REQUEST_ARG_LOAD_ALL_PAGES, loadAllPages);
 
             download(context, feed, null, new File(getFeedfilePath(context),
-                    getFeedfileName(feed)), true, username, password, ifModifiedSince, true, args);
+                    getFeedfileName(feed)), true, username, password, lastModified, true, args);
         }
     }
 
     public synchronized void downloadFeed(Context context, Feed feed) throws DownloadRequestException {
-        downloadFeed(context, feed, false);
+        downloadFeed(context, feed, false, false);
     }
 
     public synchronized void downloadMedia(Context context, FeedMedia feedmedia)
@@ -207,7 +205,7 @@ public class DownloadRequester {
                         getMediafilename(feedmedia));
             }
             download(context, feedmedia, feed,
-                    dest, false, username, password, 0, false, null);
+                    dest, false, username, password, null, false, null);
         }
     }
 
@@ -335,7 +333,7 @@ public class DownloadRequester {
 
     private File getExternalFilesDirOrThrowException(Context context,
                                                      String type) throws DownloadRequestException {
-        File result = UserPreferences.getDataFolder(context, type);
+        File result = UserPreferences.getDataFolder(type);
         if (result == null) {
             throw new DownloadRequestException(
                     "Failed to access external storage");
@@ -351,7 +349,7 @@ public class DownloadRequester {
         if (media.getItem() != null && media.getItem().getTitle() != null) {
             String title = media.getItem().getTitle();
             // Delete reserved characters
-            titleBaseFilename = title.replaceAll("[\\\\/%\\?\\*:|<>\"\\p{Cntrl}]", "");
+            titleBaseFilename = title.replaceAll("[^a-zA-Z0-9 ._()-]", "");
             titleBaseFilename = titleBaseFilename.trim();
         }
 

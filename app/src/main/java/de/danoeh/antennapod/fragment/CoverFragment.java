@@ -1,7 +1,5 @@
 package de.danoeh.antennapod.fragment;
 
-import android.app.Activity;
-import android.content.Context;
 import android.os.Bundle;
 import android.support.v4.app.Fragment;
 import android.util.Log;
@@ -9,13 +7,11 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageView;
+import android.widget.TextView;
 
 import com.bumptech.glide.Glide;
-import com.bumptech.glide.load.engine.DiskCacheStrategy;
 
-import de.danoeh.antennapod.BuildConfig;
 import de.danoeh.antennapod.R;
-import de.danoeh.antennapod.activity.AudioplayerActivity;
 import de.danoeh.antennapod.activity.AudioplayerActivity.AudioplayerContentFragment;
 import de.danoeh.antennapod.core.glide.ApGlideSettings;
 import de.danoeh.antennapod.core.util.playback.Playable;
@@ -23,16 +19,17 @@ import de.danoeh.antennapod.core.util.playback.Playable;
 /**
  * Displays the cover and the title of a FeedItem.
  */
-public class CoverFragment extends Fragment implements
-        AudioplayerContentFragment {
+public class CoverFragment extends Fragment implements AudioplayerContentFragment {
+
     private static final String TAG = "CoverFragment";
     private static final String ARG_PLAYABLE = "arg.playable";
 
     private Playable media;
 
+    private View root;
+    private TextView txtvPodcastTitle;
+    private TextView txtvEpisodeTitle;
     private ImageView imgvCover;
-
-    private boolean viewCreated = false;
 
     public static CoverFragment newInstance(Playable item) {
         CoverFragment f = new CoverFragment();
@@ -47,7 +44,6 @@ public class CoverFragment extends Fragment implements
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setRetainInstance(true);
         Bundle args = getArguments();
         if (args != null) {
             media = args.getParcelable(ARG_PLAYABLE);
@@ -59,39 +55,23 @@ public class CoverFragment extends Fragment implements
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container,
                              Bundle savedInstanceState) {
-        View root = inflater.inflate(R.layout.cover_fragment, container, false);
+        root = inflater.inflate(R.layout.cover_fragment, container, false);
+        txtvPodcastTitle = (TextView) root.findViewById(R.id.txtvPodcastTitle);
+        txtvEpisodeTitle = (TextView) root.findViewById(R.id.txtvEpisodeTitle);
         imgvCover = (ImageView) root.findViewById(R.id.imgvCover);
-        imgvCover.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                Activity activity = getActivity();
-                if (activity != null && activity instanceof AudioplayerActivity) {
-                    ((AudioplayerActivity)activity).switchToLastFragment();
-                }
-            }
-        });
-        viewCreated = true;
         return root;
     }
 
     private void loadMediaInfo() {
         if (media != null) {
-            imgvCover.post(new Runnable() {
-
-                @Override
-                public void run() {
-                    Context c = getActivity();
-                    if (c != null) {
-                        Glide.with(c)
-                                .load(media.getImageUri())
-                                .placeholder(R.color.light_gray)
-                                .error(R.color.light_gray)
-                                .diskCacheStrategy(ApGlideSettings.AP_DISK_CACHE_STRATEGY)
-                                .dontAnimate()
-                                .into(imgvCover);
-                    }
-                }
-            });
+            txtvPodcastTitle.setText(media.getFeedTitle());
+            txtvEpisodeTitle.setText(media.getEpisodeTitle());
+            Glide.with(this)
+                    .load(media.getImageUri())
+                    .diskCacheStrategy(ApGlideSettings.AP_DISK_CACHE_STRATEGY)
+                    .dontAnimate()
+                    .fitCenter()
+                    .into(imgvCover);
         } else {
             Log.w(TAG, "loadMediaInfo was called while media was null");
         }
@@ -99,12 +79,10 @@ public class CoverFragment extends Fragment implements
 
     @Override
     public void onStart() {
-        if (BuildConfig.DEBUG)
-            Log.d(TAG, "On Start");
+        Log.d(TAG, "On Start");
         super.onStart();
         if (media != null) {
-            if (BuildConfig.DEBUG)
-                Log.d(TAG, "Loading media info");
+            Log.d(TAG, "Loading media info");
             loadMediaInfo();
         } else {
             Log.w(TAG, "Unable to load media info: media was null");
@@ -112,12 +90,19 @@ public class CoverFragment extends Fragment implements
     }
 
     @Override
-    public void onDataSetChanged(Playable media) {
-        this.media = media;
-        if (viewCreated) {
-            loadMediaInfo();
-        }
+    public void onDestroy() {
+        super.onDestroy();
+        // prevent memory leaks
+        root = null;
+    }
 
+    @Override
+    public void onMediaChanged(Playable media) {
+        if(!isAdded() || this.media == media) {
+            return;
+        }
+        this.media = media;
+        loadMediaInfo();
     }
 
 }

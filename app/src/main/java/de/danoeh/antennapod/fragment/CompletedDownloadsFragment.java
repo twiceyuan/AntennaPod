@@ -1,14 +1,20 @@
 package de.danoeh.antennapod.fragment;
 
-import android.app.Activity;
 import android.content.Context;
-import android.os.AsyncTask;
+import android.content.res.TypedArray;
+import android.graphics.Color;
 import android.os.Bundle;
 import android.support.v4.app.ListFragment;
+import android.util.Log;
+import android.view.Menu;
+import android.view.MenuInflater;
+import android.view.MenuItem;
 import android.view.View;
 import android.widget.ListView;
 
-import java.util.Collections;
+import com.joanzapata.iconify.IconDrawable;
+import com.joanzapata.iconify.fonts.FontAwesomeIcons;
+
 import java.util.List;
 
 import de.danoeh.antennapod.R;
@@ -16,29 +22,38 @@ import de.danoeh.antennapod.activity.MainActivity;
 import de.danoeh.antennapod.adapter.DownloadedEpisodesListAdapter;
 import de.danoeh.antennapod.core.feed.EventDistributor;
 import de.danoeh.antennapod.core.feed.FeedItem;
+import de.danoeh.antennapod.core.preferences.UserPreferences;
 import de.danoeh.antennapod.core.storage.DBReader;
 import de.danoeh.antennapod.core.storage.DBWriter;
+import de.danoeh.antennapod.dialog.EpisodesApplyActionFragment;
+import rx.Observable;
+import rx.Subscription;
+import rx.android.schedulers.AndroidSchedulers;
+import rx.schedulers.Schedulers;
 
 /**
  * Displays all running downloads and provides a button to delete them
  */
 public class CompletedDownloadsFragment extends ListFragment {
-    private static final int EVENTS =
-            EventDistributor.DOWNLOAD_HANDLED |
-                    EventDistributor.DOWNLOADLOG_UPDATE |
-                    EventDistributor.UNREAD_ITEMS_UPDATE;
+
+    private static final String TAG = CompletedDownloadsFragment.class.getSimpleName();
+
+    private static final int EVENTS = EventDistributor.DOWNLOAD_HANDLED |
+            EventDistributor.DOWNLOADLOG_UPDATE |
+            EventDistributor.UNREAD_ITEMS_UPDATE;
 
     private List<FeedItem> items;
     private DownloadedEpisodesListAdapter listAdapter;
 
     private boolean viewCreated = false;
-    private boolean itemsLoaded = false;
+
+    private Subscription subscription;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-
-        startItemLoader();
+        setHasOptionsMenu(true);
+        loadItems();
     }
 
     @Override
@@ -51,13 +66,17 @@ public class CompletedDownloadsFragment extends ListFragment {
     public void onStop() {
         super.onStop();
         EventDistributor.getInstance().unregister(contentUpdate);
-        stopItemLoader();
+        if(subscription != null) {
+            subscription.unsubscribe();
+        }
     }
 
     @Override
     public void onDetach() {
         super.onDetach();
-        stopItemLoader();
+        if(subscription != null) {
+            subscription.unsubscribe();
+        }
     }
 
     @Override
@@ -65,13 +84,15 @@ public class CompletedDownloadsFragment extends ListFragment {
         super.onDestroyView();
         listAdapter = null;
         viewCreated = false;
-        stopItemLoader();
+        if(subscription != null) {
+            subscription.unsubscribe();
+        }
     }
 
     @Override
-    public void onAttach(Activity activity) {
-        super.onAttach(activity);
-        if (viewCreated && itemsLoaded) {
+    public void onAttach(Context context) {
+        super.onAttach(context);
+        if (viewCreated && items != null) {
             onFragmentLoaded();
         }
     }
@@ -87,7 +108,7 @@ public class CompletedDownloadsFragment extends ListFragment {
         lv.setPadding(0, vertPadding, 0, vertPadding);
 
         viewCreated = true;
-        if (itemsLoaded && getActivity() != null) {
+        if (items != null && getActivity() != null) {
             onFragmentLoaded();
         }
     }
@@ -99,7 +120,6 @@ public class CompletedDownloadsFragment extends ListFragment {
         if (item != null) {
             ((MainActivity) getActivity()).loadChildFragment(ItemFragment.newInstance(item.getId()));
         }
-
     }
 
     private void onFragmentLoaded() {
@@ -109,6 +129,43 @@ public class CompletedDownloadsFragment extends ListFragment {
         }
         setListShown(true);
         listAdapter.notifyDataSetChanged();
+        getActivity().supportInvalidateOptionsMenu();
+    }
+
+    @Override
+    public void onCreateOptionsMenu(Menu menu, MenuInflater inflater) {
+        if(!isAdded()) {
+            return;
+        }
+        super.onCreateOptionsMenu(menu, inflater);
+        if(items != null) {
+            inflater.inflate(R.menu.downloads_completed, menu);
+            MenuItem episodeActions = menu.findItem(R.id.episode_actions);
+            if(items.size() > 0) {
+                int[] attrs = {R.attr.action_bar_icon_color};
+                TypedArray ta = getActivity().obtainStyledAttributes(UserPreferences.getTheme(), attrs);
+                int textColor = ta.getColor(0, Color.GRAY);
+                ta.recycle();
+                episodeActions.setIcon(new IconDrawable(getActivity(),
+                        FontAwesomeIcons.fa_gears).color(textColor).actionBarSize());
+                episodeActions.setVisible(true);
+            } else {
+                episodeActions.setVisible(false);
+            }
+        }
+    }
+
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+        switch (item.getItemId()) {
+            case R.id.episode_actions:
+                EpisodesApplyActionFragment fragment = EpisodesApplyActionFragment
+                        .newInstance(items, EpisodesApplyActionFragment.ACTION_REMOVE);
+                ((MainActivity) getActivity()).loadChildFragment(fragment);
+                return true;
+            default:
+                return false;
+        }
     }
 
     private DownloadedEpisodesListAdapter.ItemAccess itemAccess = new DownloadedEpisodesListAdapter.ItemAccess() {
@@ -119,7 +176,11 @@ public class CompletedDownloadsFragment extends ListFragment {
 
         @Override
         public FeedItem getItem(int position) {
-            return (items != null) ? items.get(position) : null;
+            if (items != null && 0 <= position && position < items.size()) {
+                return items.get(position);
+            } else {
+                return null;
+            }
         }
 
         @Override
@@ -132,56 +193,31 @@ public class CompletedDownloadsFragment extends ListFragment {
         @Override
         public void update(EventDistributor eventDistributor, Integer arg) {
             if ((arg & EVENTS) != 0) {
-                startItemLoader();
+                loadItems();
             }
         }
     };
 
-    private ItemLoader itemLoader;
-
-    private void startItemLoader() {
-        if (itemLoader != null) {
-            itemLoader.cancel(true);
+    private void loadItems() {
+        if(subscription != null) {
+            subscription.unsubscribe();
         }
-        itemLoader = new ItemLoader();
-        itemLoader.execute();
+        if (items == null && viewCreated) {
+            setListShown(false);
+        }
+        subscription = Observable.fromCallable(() -> DBReader.getDownloadedItems())
+                .subscribeOn(Schedulers.newThread())
+                .observeOn(AndroidSchedulers.mainThread())
+                .subscribe(result -> {
+                    if (result != null) {
+                        items = result;
+                        if (viewCreated && getActivity() != null) {
+                            onFragmentLoaded();
+                        }
+                    }
+                }, error -> {
+                    Log.e(TAG, Log.getStackTraceString(error));
+                });
     }
 
-    private void stopItemLoader() {
-        if (itemLoader != null) {
-            itemLoader.cancel(true);
-        }
-    }
-
-    private class ItemLoader extends AsyncTask<Void, Void, List<FeedItem>> {
-
-        @Override
-        protected void onPreExecute() {
-            super.onPreExecute();
-            if (!itemsLoaded && viewCreated) {
-                setListShown(false);
-            }
-        }
-
-        @Override
-        protected void onPostExecute(List<FeedItem> results) {
-            super.onPostExecute(results);
-            if (results != null) {
-                items = results;
-                itemsLoaded = true;
-                if (viewCreated && getActivity() != null) {
-                    onFragmentLoaded();
-                }
-            }
-        }
-
-        @Override
-        protected List<FeedItem> doInBackground(Void... params) {
-            Context context = getActivity();
-            if (context != null) {
-                return DBReader.getDownloadedItems(context);
-            }
-            return Collections.emptyList();
-        }
-    }
 }

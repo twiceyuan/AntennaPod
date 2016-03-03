@@ -5,7 +5,7 @@ import android.view.View;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 
-import com.joanzapata.android.iconify.Iconify;
+import com.joanzapata.iconify.Iconify;
 
 import de.danoeh.antennapod.core.feed.FeedItem;
 import de.danoeh.antennapod.core.feed.FeedMedia;
@@ -47,9 +47,10 @@ public class AdapterUtils {
                                 - media.getPosition()));
             }
         } else if (!media.isDownloaded()) {
+            Log.d(TAG, "size: " + media.getSize());
             if (media.getSize() > 0) {
                 txtvPos.setText(Converter.byteToString(media.getSize()));
-            } else if(false == media.checkedOnSizeButUnknown()) {
+            } else if(NetworkUtils.isDownloadAllowed() && false == media.checkedOnSizeButUnknown()) {
                 txtvPos.setText("{fa-spinner}");
                 Iconify.addIcons(txtvPos);
                 NetworkUtils.getFeedMediaSizeObservable(media)
@@ -61,6 +62,7 @@ public class AdapterUtils {
                                         txtvPos.setText("");
                                     }
                                 }, error -> {
+                                    txtvPos.setText("");
                                     Log.e(TAG, Log.getStackTraceString(error));
                                 });
             } else {

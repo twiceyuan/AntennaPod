@@ -1,19 +1,18 @@
 package de.danoeh.antennapod.adapter;
 
 import android.content.Context;
+import android.support.v4.content.ContextCompat;
 import android.text.format.DateUtils;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.BaseAdapter;
-import android.widget.Button;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import com.joanzapata.android.iconify.Iconify;
-
-import java.util.Date;
+import com.joanzapata.iconify.Iconify;
+import com.joanzapata.iconify.widget.IconButton;
 
 import de.danoeh.antennapod.R;
 import de.danoeh.antennapod.core.dialog.DownloadRequestErrorDialogCreator;
@@ -50,7 +49,7 @@ public class DownloadLogAdapter extends BaseAdapter {
 					.getSystemService(Context.LAYOUT_INFLATER_SERVICE);
 			convertView = inflater.inflate(R.layout.downloadlog_item, parent, false);
 			holder.icon = (TextView) convertView.findViewById(R.id.txtvIcon);
-			holder.retry = (Button) convertView.findViewById(R.id.btnRetry);
+			holder.retry = (IconButton) convertView.findViewById(R.id.btnRetry);
 			holder.date = (TextView) convertView.findViewById(R.id.txtvDate);
 			holder.title = (TextView) convertView.findViewById(R.id.txtvTitle);
 			holder.type = (TextView) convertView.findViewById(R.id.txtvType);
@@ -76,14 +75,14 @@ public class DownloadLogAdapter extends BaseAdapter {
 				status.getCompletionDate().getTime(),
 				System.currentTimeMillis(), 0, 0));
 		if (status.isSuccessful()) {
-			holder.icon.setTextColor(convertView.getResources().getColor(
+			holder.icon.setTextColor(ContextCompat.getColor(convertView.getContext(),
 					R.color.download_success_green));
 			holder.icon.setText("{fa-check-circle}");
 			Iconify.addIcons(holder.icon);
 			holder.retry.setVisibility(View.GONE);
 			holder.reason.setVisibility(View.GONE);
 		} else {
-			holder.icon.setTextColor(convertView.getResources().getColor(
+			holder.icon.setTextColor(ContextCompat.getColor(convertView.getContext(),
 					R.color.download_failed_red));
 			holder.icon.setText("{fa-times-circle}");
 			Iconify.addIcons(holder.icon);
@@ -96,8 +95,6 @@ public class DownloadLogAdapter extends BaseAdapter {
 			if(status.getFeedfileType() != FeedImage.FEEDFILETYPE_FEEDIMAGE &&
 					!newerWasSuccessful(position, status.getFeedfileType(), status.getFeedfileId())) {
 				holder.retry.setVisibility(View.VISIBLE);
-				holder.retry.setText("{fa-repeat}");
-				Iconify.addIcons(holder.retry);
 				holder.retry.setOnClickListener(clickListener);
 				ButtonHolder btnHolder;
 				if(holder.retry.getTag() != null) {
@@ -123,11 +120,10 @@ public class DownloadLogAdapter extends BaseAdapter {
 		public void onClick(View v) {
 			ButtonHolder holder = (ButtonHolder) v.getTag();
 			if(holder.typeId == Feed.FEEDFILETYPE_FEED) {
-				Feed feed = DBReader.getFeed(context, holder.id);
+				Feed feed = DBReader.getFeed(holder.id);
 				if (feed != null) {
-					feed.setLastUpdate(new Date(0)); // force refresh
 					try {
-						DBTasks.refreshFeed(context, feed);
+						DBTasks.forceRefreshFeed(context, feed);
 					} catch (DownloadRequestException e) {
 						e.printStackTrace();
 					}
@@ -135,13 +131,17 @@ public class DownloadLogAdapter extends BaseAdapter {
 					Log.wtf(TAG, "Could not find feed for feed id: " + holder.id);
 				}
 			} else if(holder.typeId == FeedMedia.FEEDFILETYPE_FEEDMEDIA) {
-				FeedMedia media = DBReader.getFeedMedia(context, holder.id);
-				try {
-					DBTasks.downloadFeedItems(context, media.getItem());
-					Toast.makeText(context, R.string.status_downloading_label, Toast.LENGTH_SHORT).show();
-				} catch (DownloadRequestException e) {
-					e.printStackTrace();
-					DownloadRequestErrorDialogCreator.newRequestErrorDialog(context, e.getMessage());
+				FeedMedia media = DBReader.getFeedMedia(holder.id);
+				if (media != null) {
+					try {
+						DBTasks.downloadFeedItems(context, media.getItem());
+						Toast.makeText(context, R.string.status_downloading_label, Toast.LENGTH_SHORT).show();
+					} catch (DownloadRequestException e) {
+						e.printStackTrace();
+						DownloadRequestErrorDialogCreator.newRequestErrorDialog(context, e.getMessage());
+					}
+				} else {
+					Log.wtf(TAG, "Could not find media for id: " + holder.id);
 				}
 			} else {
 				Log.wtf(TAG, "Unexpected type id: " + holder.typeId);
@@ -161,7 +161,7 @@ public class DownloadLogAdapter extends BaseAdapter {
 
 	static class Holder {
 		TextView icon;
-		Button retry;
+		IconButton retry;
 		TextView title;
 		TextView type;
 		TextView date;

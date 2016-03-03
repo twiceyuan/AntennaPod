@@ -1,5 +1,41 @@
 Change Log
 ==========
+Version 1.5.0
+-------------
+* Exclude episodes from auto download by keyword
+* Configure feeds to prevent them from refreshing automatically
+* Improved audio player
+* Improved UI
+* Bug fixes
+
+Version 1.4.1
+-------------
+* Performance improvements
+* Hardware buttons now ff and rewind instead of skipping
+* Option to have forward button skip
+* Option to send crash reports directly to developers
+* Highlight currently playing episode
+* Widget improvements
+
+Version 1.4.0.12
+----------------
+* Fix for crash on Huawei devices (media buttons may not work)
+
+Version 1.4
+-----------
+* BLUETOOTH PERMISSION: Needed to be able to resume playback when a Bluetooth device reconnects with your phone
+* VIBRATE PERMISSION: Used optionally with the sleep timer
+* Native variable speed playback (experimental via options)
+* Improved sleep timer
+* Mark episodes as 'favorite'
+* Notification can skip episodes
+* Keep episodes when skipping them
+* Episode art on lock screen
+* Flexible episode cleanup
+* Rewind after pause
+* Usability improvements
+* Bug fixes
+
 Version 1.3
 -----------
 * Bulk actions on feed episodes (download, queue, delete)

@@ -2,10 +2,10 @@ package de.danoeh.antennapod.core.util.playback;
 
 import android.content.Context;
 import android.content.res.TypedArray;
+import android.support.annotation.NonNull;
 import android.util.Log;
 import android.util.TypedValue;
 
-import org.apache.commons.lang3.Validate;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
@@ -88,7 +88,7 @@ public class Timeline {
         }
 
         // replace ASCII line breaks with HTML ones if shownotes don't contain HTML line breaks already
-        if(!LINE_BREAK_REGEX.matcher(shownotes).find()) {
+        if(!LINE_BREAK_REGEX.matcher(shownotes).find() && !shownotes.contains("<p>")) {
             shownotes = shownotes.replace("\n", "<br />");
         }
 
@@ -158,8 +158,7 @@ public class Timeline {
     }
 
 
-    public void setShownotesProvider(ShownotesProvider shownotesProvider) {
-        Validate.notNull(shownotesProvider);
+    public void setShownotesProvider(@NonNull ShownotesProvider shownotesProvider) {
         this.shownotesProvider = shownotesProvider;
     }
 }

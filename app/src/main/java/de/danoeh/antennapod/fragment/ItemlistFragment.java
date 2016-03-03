@@ -7,14 +7,10 @@ import android.content.Intent;
 import android.content.res.TypedArray;
 import android.graphics.Color;
 import android.graphics.LightingColorFilter;
-import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Bundle;
-import android.os.Handler;
-import android.support.v4.app.Fragment;
 import android.support.v4.app.ListFragment;
 import android.support.v4.view.MenuItemCompat;
-import android.support.v7.app.ActionBarActivity;
 import android.support.v7.widget.SearchView;
 import android.util.Log;
 import android.view.ContextMenu;
@@ -24,7 +20,6 @@ import android.view.MenuInflater;
 import android.view.MenuItem;
 import android.view.View;
 import android.widget.AdapterView;
-import android.widget.IconTextView;
 import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.ListAdapter;
@@ -33,9 +28,10 @@ import android.widget.RelativeLayout;
 import android.widget.TextView;
 
 import com.bumptech.glide.Glide;
-import com.bumptech.glide.load.engine.DiskCacheStrategy;
-import com.joanzapata.android.iconify.IconDrawable;
-import com.joanzapata.android.iconify.Iconify;
+import com.joanzapata.iconify.IconDrawable;
+import com.joanzapata.iconify.Iconify;
+import com.joanzapata.iconify.fonts.FontAwesomeIcons;
+import com.joanzapata.iconify.widget.IconTextView;
 
 import org.apache.commons.lang3.Validate;
 
@@ -46,25 +42,30 @@ import de.danoeh.antennapod.activity.FeedInfoActivity;
 import de.danoeh.antennapod.activity.MainActivity;
 import de.danoeh.antennapod.adapter.DefaultActionButtonCallback;
 import de.danoeh.antennapod.adapter.FeedItemlistAdapter;
-import de.danoeh.antennapod.core.asynctask.DownloadObserver;
 import de.danoeh.antennapod.core.asynctask.FeedRemover;
 import de.danoeh.antennapod.core.dialog.ConfirmationDialog;
 import de.danoeh.antennapod.core.dialog.DownloadRequestErrorDialogCreator;
+import de.danoeh.antennapod.core.event.DownloadEvent;
+import de.danoeh.antennapod.core.event.DownloaderUpdate;
+import de.danoeh.antennapod.core.event.FavoritesEvent;
+import de.danoeh.antennapod.core.event.FeedItemEvent;
+import de.danoeh.antennapod.core.event.QueueEvent;
 import de.danoeh.antennapod.core.feed.EventDistributor;
 import de.danoeh.antennapod.core.feed.Feed;
 import de.danoeh.antennapod.core.feed.FeedEvent;
 import de.danoeh.antennapod.core.feed.FeedItem;
 import de.danoeh.antennapod.core.feed.FeedItemFilter;
 import de.danoeh.antennapod.core.feed.FeedMedia;
-import de.danoeh.antennapod.core.feed.QueueEvent;
 import de.danoeh.antennapod.core.glide.ApGlideSettings;
 import de.danoeh.antennapod.core.glide.FastBlurTransformation;
+import de.danoeh.antennapod.core.preferences.UserPreferences;
 import de.danoeh.antennapod.core.service.download.DownloadService;
 import de.danoeh.antennapod.core.service.download.Downloader;
 import de.danoeh.antennapod.core.storage.DBReader;
 import de.danoeh.antennapod.core.storage.DBTasks;
 import de.danoeh.antennapod.core.storage.DownloadRequestException;
 import de.danoeh.antennapod.core.storage.DownloadRequester;
+import de.danoeh.antennapod.core.util.FeedItemUtil;
 import de.danoeh.antennapod.core.util.LongList;
 import de.danoeh.antennapod.core.util.gui.MoreContentListFooterUtil;
 import de.danoeh.antennapod.dialog.EpisodesApplyActionFragment;
@@ -72,6 +73,10 @@ import de.danoeh.antennapod.menuhandler.FeedItemMenuHandler;
 import de.danoeh.antennapod.menuhandler.FeedMenuHandler;
 import de.danoeh.antennapod.menuhandler.MenuItemUtils;
 import de.greenrobot.event.EventBus;
+import rx.Observable;
+import rx.Subscription;
+import rx.android.schedulers.AndroidSchedulers;
+import rx.schedulers.Schedulers;
 
 /**
  * Displays a list of FeedItems.
@@ -80,9 +85,8 @@ import de.greenrobot.event.EventBus;
 public class ItemlistFragment extends ListFragment {
     private static final String TAG = "ItemlistFragment";
 
-    private static final int EVENTS = EventDistributor.DOWNLOAD_HANDLED
-            | EventDistributor.DOWNLOAD_QUEUED
-            | EventDistributor.UNREAD_ITEMS_UPDATE
+    private static final int EVENTS = EventDistributor.UNREAD_ITEMS_UPDATE
+            | EventDistributor.FEED_LIST_UPDATE
             | EventDistributor.PLAYER_STATUS_UPDATE;
 
     public static final String EXTRA_SELECTED_FEEDITEM = "extra.de.danoeh.antennapod.activity.selected_feeditem";
@@ -95,11 +99,11 @@ public class ItemlistFragment extends ListFragment {
     private long feedID;
     private Feed feed;
     private LongList queuedItemsIds;
+    private LongList favoritedItemsId;
 
     private boolean itemsLoaded = false;
     private boolean viewsCreated = false;
 
-    private DownloadObserver downloadObserver;
     private List<Downloader> downloaderList;
 
     private MoreContentListFooterUtil listFooter;
@@ -109,6 +113,8 @@ public class ItemlistFragment extends ListFragment {
     private IconTextView txtvFailure;
 
     private TextView txtvInformation;
+
+    private Subscription subscription;
 
     /**
      * Creates new ItemlistFragment which shows the Feeditems of a specific
@@ -139,37 +145,29 @@ public class ItemlistFragment extends ListFragment {
     @Override
     public void onStart() {
         super.onStart();
-        EventDistributor.getInstance().register(contentUpdate);
-        EventBus.getDefault().register(this);
-        if (downloadObserver != null) {
-            downloadObserver.setActivity(getActivity());
-            downloadObserver.onResume();
-        }
         if (viewsCreated && itemsLoaded) {
             onFragmentLoaded();
         }
     }
 
     @Override
-    public void onStop() {
-        super.onStop();
-        EventDistributor.getInstance().unregister(contentUpdate);
-        EventBus.getDefault().unregister(this);
-        stopItemLoader();
-    }
-
-    @Override
     public void onResume() {
         super.onResume();
-        Log.d(TAG, "onResume()");
+        EventDistributor.getInstance().register(contentUpdate);
+        EventBus.getDefault().registerSticky(this);
+        ((MainActivity)getActivity()).getSupportActionBar().setTitle("");
         updateProgressBarVisibility();
-        startItemLoader();
+        loadItems();
     }
 
     @Override
-    public void onDetach() {
-        super.onDetach();
-        stopItemLoader();
+    public void onPause() {
+        super.onPause();
+        EventDistributor.getInstance().unregister(contentUpdate);
+        EventBus.getDefault().unregister(this);
+        if(subscription != null) {
+            subscription.unsubscribe();
+        }
     }
 
     @Override
@@ -182,9 +180,6 @@ public class ItemlistFragment extends ListFragment {
         adapter = null;
         viewsCreated = false;
         listFooter = null;
-        if (downloadObserver != null) {
-            downloadObserver.onPause();
-        }
     }
 
     private final MenuItemUtils.UpdateRefreshMenuItemChecker updateRefreshMenuItemChecker = new MenuItemUtils.UpdateRefreshMenuItemChecker() {
@@ -200,6 +195,9 @@ public class ItemlistFragment extends ListFragment {
 
     @Override
     public void onCreateOptionsMenu(Menu menu, MenuInflater inflater) {
+        if(!isAdded()) {
+            return;
+        }
         super.onCreateOptionsMenu(menu, inflater);
 
         if (itemsLoaded) {
@@ -228,13 +226,13 @@ public class ItemlistFragment extends ListFragment {
                 menu.findItem(R.id.share_link_item).setVisible(false);
                 menu.findItem(R.id.visit_website_item).setVisible(false);
             }
-            int[] attrs = { android.R.attr.textColor };
-            TypedArray ta = getActivity().obtainStyledAttributes(attrs);
+            int[] attrs = { R.attr.action_bar_icon_color };
+            TypedArray ta = getActivity().obtainStyledAttributes(UserPreferences.getTheme(), attrs);
             int textColor = ta.getColor(0, Color.GRAY);
             ta.recycle();
 
             menu.findItem(R.id.episode_actions).setIcon(new IconDrawable(getActivity(),
-                    Iconify.IconValue.fa_gears).color(textColor).actionBarSize());
+                    FontAwesomeIcons.fa_gears).color(textColor).actionBarSize());
 
             isUpdatingFeed = MenuItemUtils.updateRefreshMenuItem(menu, R.id.refresh_item, updateRefreshMenuItemChecker);
         }
@@ -254,7 +252,8 @@ public class ItemlistFragment extends ListFragment {
                 if (!FeedMenuHandler.onOptionsItemClicked(getActivity(), item, feed)) {
                     switch (item.getItemId()) {
                         case R.id.episode_actions:
-                            Fragment fragment = new EpisodesApplyActionFragment(feed.getItems());
+                            EpisodesApplyActionFragment fragment = EpisodesApplyActionFragment
+                                    .newInstance(feed.getItems());
                             ((MainActivity)getActivity()).loadChildFragment(fragment);
                             return true;
                         case R.id.remove_item:
@@ -263,7 +262,7 @@ public class ItemlistFragment extends ListFragment {
                                 @Override
                                 protected void onPostExecute(Void result) {
                                     super.onPostExecute(result);
-                                    ((MainActivity) getActivity()).loadFragment(NewEpisodesFragment.TAG, null);
+                                    ((MainActivity) getActivity()).loadFragment(EpisodesFragment.TAG, null);
                                 }
                             };
                             ConfirmationDialog conDialog = new ConfirmationDialog(getActivity(),
@@ -326,7 +325,8 @@ public class ItemlistFragment extends ListFragment {
 
         contextMenu = menu;
         lastMenuInfo = (AdapterView.AdapterContextMenuInfo) menuInfo;
-        FeedItemMenuHandler.onPrepareMenu(getActivity(), contextMenuInterface, item, true, queuedItemsIds);
+        FeedItemMenuHandler.onPrepareMenu(contextMenuInterface, item, true, queuedItemsIds,
+                favoritedItemsId);
     }
 
     @Override
@@ -364,7 +364,6 @@ public class ItemlistFragment extends ListFragment {
     @Override
     public void onViewCreated(View view, Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
-        ((ActionBarActivity) getActivity()).getSupportActionBar().setTitle("");
 
         registerForContextMenu(getListView());
 
@@ -376,21 +375,58 @@ public class ItemlistFragment extends ListFragment {
 
     @Override
     public void onListItemClick(ListView l, View v, int position, long id) {
+        if(adapter == null) {
+            return;
+        }
         FeedItem selection = adapter.getItem(position - l.getHeaderViewsCount());
         if (selection != null) {
-            ((MainActivity) getActivity()).loadChildFragment(ItemFragment.newInstance(selection.getId()));
+            MainActivity activity = (MainActivity) getActivity();
+            activity.loadChildFragment(ItemFragment.newInstance(selection.getId()));
+            activity.getSupportActionBar().setTitle(feed.getTitle());
         }
     }
 
     public void onEvent(QueueEvent event) {
-        Log.d(TAG, "onEvent(" + event + ")");
-        startItemLoader();
+        Log.d(TAG, "onEvent() called with: " + "event = [" + event + "]");
+        loadItems();
+    }
+
+    public void onEvent(FavoritesEvent event) {
+        Log.d(TAG, "onEvent() called with: " + "event = [" + event + "]");
+        loadItems();
     }
 
     public void onEvent(FeedEvent event) {
-        Log.d(TAG, "onEvent(" + event + ")");
+        Log.d(TAG, "onEvent() called with: " + "event = [" + event + "]");
         if(event.feedId == feedID) {
-            startItemLoader();
+            loadItems();
+        }
+    }
+
+    public void onEventMainThread(FeedItemEvent event) {
+        Log.d(TAG, "onEventMainThread() called with: " + "event = [" + event + "]");
+        boolean queueChanged = false;
+        if(feed == null || feed.getItems() == null || adapter == null) {
+            return;
+        }
+        for(FeedItem item : event.items) {
+            int pos = FeedItemUtil.indexOfItemWithId(feed.getItems(), item.getId());
+            if(pos >= 0) {
+                loadItems();
+                return;
+            }
+        }
+    }
+
+    public void onEventMainThread(DownloadEvent event) {
+        Log.d(TAG, "onEventMainThread() called with: " + "event = [" + event + "]");
+        DownloaderUpdate update = event.update;
+        downloaderList = update.downloaders;
+        if (isUpdatingFeed != event.update.feedIds.length > 0) {
+            updateProgressBarVisibility();
+        }
+        if(adapter != null && update.mediaIds.length > 0) {
+            adapter.notifyDataSetChanged();
         }
     }
 
@@ -400,12 +436,8 @@ public class ItemlistFragment extends ListFragment {
         public void update(EventDistributor eventDistributor, Integer arg) {
             if ((EVENTS & arg) != 0) {
                 Log.d(TAG, "Received contentUpdate Intent. arg " + arg);
-                if ((EventDistributor.DOWNLOAD_QUEUED & arg) != 0) {
-                    updateProgressBarVisibility();
-                } else {
-                    startItemLoader();
-                    updateProgressBarVisibility();
-                }
+                loadItems();
+                updateProgressBarVisibility();
             }
         }
     };
@@ -433,8 +465,6 @@ public class ItemlistFragment extends ListFragment {
             setupFooterView();
             adapter = new FeedItemlistAdapter(getActivity(), itemAccess, new DefaultActionButtonCallback(getActivity()), false, true);
             setListAdapter(adapter);
-            downloadObserver = new DownloadObserver(getActivity(), new Handler(), downloadObserverCallback);
-            downloadObserver.onResume();
         }
         refreshHeaderView();
         setListShown(true);
@@ -452,7 +482,7 @@ public class ItemlistFragment extends ListFragment {
 
     private void refreshHeaderView() {
         if (getListView() == null || feed == null) {
-            Log.e(TAG, "Unable to setup listview: listView = null or feed = null");
+            Log.e(TAG, "Unable to setup listview: recyclerView = null or feed = null");
             return;
         }
         if(feed.hasLastUpdateFailed()) {
@@ -474,25 +504,13 @@ public class ItemlistFragment extends ListFragment {
                 txtvInformation.setVisibility(View.GONE);
             }
         } else {
-
             txtvInformation.setVisibility(View.GONE);
         }
     }
 
-
-    private DownloadObserver.Callback downloadObserverCallback = new DownloadObserver.Callback() {
-        @Override
-        public void onContentChanged(List<Downloader> downloaderList) {
-            ItemlistFragment.this.downloaderList = downloaderList;
-            if (adapter != null) {
-                adapter.notifyDataSetChanged();
-            }
-        }
-    };
-
     private void setupHeaderView() {
         if (getListView() == null || feed == null) {
-            Log.e(TAG, "Unable to setup listview: listView = null or feed = null");
+            Log.e(TAG, "Unable to setup listview: recyclerView = null or feed = null");
             return;
         }
         ListView lv = getListView();
@@ -534,15 +552,12 @@ public class ItemlistFragment extends ListFragment {
                 .dontAnimate()
                 .into(imgvCover);
 
-        butShowInfo.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                if (viewsCreated && itemsLoaded) {
-                    Intent startIntent = new Intent(getActivity(), FeedInfoActivity.class);
-                    startIntent.putExtra(FeedInfoActivity.EXTRA_FEED_ID,
-                            feed.getId());
-                    startActivity(startIntent);
-                }
+        butShowInfo.setOnClickListener(v -> {
+            if (viewsCreated && itemsLoaded) {
+                Intent startIntent = new Intent(getActivity(), FeedInfoActivity.class);
+                startIntent.putExtra(FeedInfoActivity.EXTRA_FEED_ID,
+                        feed.getId());
+                startActivity(startIntent);
             }
         });
     }
@@ -550,7 +565,7 @@ public class ItemlistFragment extends ListFragment {
 
     private void setupFooterView() {
         if (getListView() == null || feed == null) {
-            Log.e(TAG, "Unable to setup listview: listView = null or feed = null");
+            Log.e(TAG, "Unable to setup listview: recyclerView = null or feed = null");
             return;
         }
         if (feed.isPaged() && feed.getNextPageLink() != null) {
@@ -560,16 +575,13 @@ public class ItemlistFragment extends ListFragment {
             View header = inflater.inflate(R.layout.more_content_list_footer, lv, false);
             lv.addFooterView(header);
             listFooter = new MoreContentListFooterUtil(header);
-            listFooter.setClickListener(new MoreContentListFooterUtil.Listener() {
-                @Override
-                public void onClick() {
-                    if (feed != null) {
-                        try {
-                            DBTasks.loadNextPageOfFeed(getActivity(), feed, false);
-                        } catch (DownloadRequestException e) {
-                            e.printStackTrace();
-                            DownloadRequestErrorDialogCreator.newRequestErrorDialog(getActivity(), e.getMessage());
-                        }
+            listFooter.setClickListener(() -> {
+                if (feed != null) {
+                    try {
+                        DBTasks.loadNextPageOfFeed(getActivity(), feed, false);
+                    } catch (DownloadRequestException e) {
+                        e.printStackTrace();
+                        DownloadRequestErrorDialogCreator.newRequestErrorDialog(getActivity(), e.getMessage());
                     }
                 }
             });
@@ -580,7 +592,11 @@ public class ItemlistFragment extends ListFragment {
 
         @Override
         public FeedItem getItem(int position) {
-            return (feed != null) ? feed.getItemAtIndex(position) : null;
+            if (feed != null && 0 <= position && position < feed.getNumOfItems()) {
+                return feed.getItemAtIndex(position);
+            } else {
+                return null;
+            }
         }
 
         @Override
@@ -607,51 +623,38 @@ public class ItemlistFragment extends ListFragment {
         }
     };
 
-    private ItemLoader itemLoader;
 
-    private void startItemLoader() {
-        if (itemLoader != null) {
-            itemLoader.cancel(true);
+    private void loadItems() {
+        if(subscription != null) {
+            subscription.unsubscribe();
         }
-        itemLoader = new ItemLoader();
-        itemLoader.execute(feedID);
+        subscription = Observable.fromCallable(() -> loadData())
+                .subscribeOn(Schedulers.newThread())
+                .observeOn(AndroidSchedulers.mainThread())
+                .subscribe(result -> {
+                    if (result != null) {
+                        feed = (Feed) result[0];
+                        queuedItemsIds = (LongList) result[1];
+                        favoritedItemsId = (LongList) result[2];
+                        itemsLoaded = true;
+                        if (viewsCreated) {
+                            onFragmentLoaded();
+                        }
+                    }
+                }, error -> {
+                    Log.e(TAG, Log.getStackTraceString(error));
+                });
     }
 
-    private void stopItemLoader() {
-        if (itemLoader != null) {
-            itemLoader.cancel(true);
+    private Object[] loadData() {
+        Feed feed = DBReader.getFeed(feedID);
+        if(feed != null && feed.getItemFilter() != null) {
+            FeedItemFilter filter = feed.getItemFilter();
+            feed.setItems(filter.filter(feed.getItems()));
         }
+        LongList queuedItemsIds = DBReader.getQueueIDList();
+        LongList favoritedItemsId = DBReader.getFavoriteIDList();
+        return new Object[] { feed, queuedItemsIds, favoritedItemsId };
     }
 
-    private class ItemLoader extends AsyncTask<Long, Void, Object[]> {
-        @Override
-        protected Object[] doInBackground(Long... params) {
-            long feedID = params[0];
-            Context context = getActivity();
-            if (context != null) {
-                Feed feed = DBReader.getFeed(context, feedID);
-                if(feed != null && feed.getItemFilter() != null) {
-                    FeedItemFilter filter = feed.getItemFilter();
-                    feed.setItems(filter.filter(context, feed.getItems()));
-                }
-                LongList queuedItemsIds = DBReader.getQueueIDList(context);
-                return new Object[] { feed, queuedItemsIds };
-            } else {
-                return null;
-            }
-        }
-
-        @Override
-        protected void onPostExecute(Object[] res) {
-            super.onPostExecute(res);
-            if (res != null) {
-                feed = (Feed) res[0];
-                queuedItemsIds = (LongList) res[1];
-                itemsLoaded = true;
-                if (viewsCreated) {
-                    onFragmentLoaded();
-                }
-            }
-        }
-    }
 }

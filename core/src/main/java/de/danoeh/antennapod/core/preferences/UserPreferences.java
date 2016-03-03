@@ -7,11 +7,11 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.SystemClock;
 import android.preference.PreferenceManager;
+import android.support.annotation.NonNull;
 import android.support.v4.app.NotificationCompat;
+import android.text.TextUtils;
 import android.util.Log;
 
-import org.apache.commons.lang3.StringUtils;
-import org.apache.commons.lang3.Validate;
 import org.json.JSONArray;
 import org.json.JSONException;
 
@@ -20,13 +20,15 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
-import de.danoeh.antennapod.core.ClientConfig;
 import de.danoeh.antennapod.core.R;
 import de.danoeh.antennapod.core.receiver.FeedUpdateReceiver;
+import de.danoeh.antennapod.core.storage.APCleanupAlgorithm;
+import de.danoeh.antennapod.core.storage.APNullCleanupAlgorithm;
+import de.danoeh.antennapod.core.storage.APQueueCleanupAlgorithm;
+import de.danoeh.antennapod.core.storage.EpisodeCleanupAlgorithm;
 
 /**
  * Provides access to preferences set by the user in the settings screen. A
@@ -47,6 +49,7 @@ public class UserPreferences {
     public static final String PREF_DRAWER_FEED_COUNTER = "prefDrawerFeedIndicator";
     public static final String PREF_EXPANDED_NOTIFICATION = "prefExpandNotify";
     public static final String PREF_PERSISTENT_NOTIFICATION = "prefPersistNotify";
+    public static final String PREF_LOCKSCREEN_BACKGROUND = "prefLockscreenBackground";
     public static final String PREF_SHOW_DOWNLOAD_REPORT = "prefShowDownloadReport";
 
     // Queue
@@ -55,7 +58,10 @@ public class UserPreferences {
     // Playback
     public static final String PREF_PAUSE_ON_HEADSET_DISCONNECT = "prefPauseOnHeadsetDisconnect";
     public static final String PREF_UNPAUSE_ON_HEADSET_RECONNECT = "prefUnpauseOnHeadsetReconnect";
+    public static final String PREF_UNPAUSE_ON_BLUETOOTH_RECONNECT = "prefUnpauseOnBluetoothReconnect";
+    public static final String PREF_HARDWARE_FOWARD_BUTTON_SKIPS = "prefHardwareForwardButtonSkips";
     public static final String PREF_FOLLOW_QUEUE = "prefFollowQueue";
+    public static final String PREF_SKIP_KEEPS_EPISODE = "prefSkipKeepsEpisode";
     public static final String PREF_AUTO_DELETE = "prefAutoDelete";
     public static final String PREF_SMART_MARK_AS_PLAYED_SECS = "prefSmartMarkAsPlayedSecs";
     public static final String PREF_PLAYBACK_SPEED_ARRAY = "prefPlaybackSpeedArray";
@@ -65,6 +71,7 @@ public class UserPreferences {
     // Network
     public static final String PREF_UPDATE_INTERVAL = "prefAutoUpdateIntervall";
     public static final String PREF_MOBILE_UPDATE = "prefMobileUpdate";
+    public static final String PREF_EPISODE_CLEANUP = "prefEpisodeCleanup";
     public static final String PREF_PARALLEL_DOWNLOADS = "prefParallelDownloads";
     public static final String PREF_EPISODE_CACHE_SIZE = "prefEpisodeCacheSize";
     public static final String PREF_ENABLE_AUTODL = "prefEnableAutoDl";
@@ -87,11 +94,22 @@ public class UserPreferences {
     public static final String PREF_QUEUE_LOCKED = "prefQueueLocked";
     public static final String IMAGE_CACHE_DEFAULT_VALUE = "100";
     public static final int IMAGE_CACHE_SIZE_MINIMUM = 20;
+    public static final String PREF_LEFT_VOLUME = "prefLeftVolume";
+    public static final String PREF_RIGHT_VOLUME = "prefRightVolume";
+
+    // Experimental
+    public static final String PREF_SONIC = "prefSonic";
+    public static final String PREF_STEREO_TO_MONO = "PrefStereoToMono";
+    public static final String PREF_NORMALIZER = "prefNormalizer";
+    public static final int EPISODE_CLEANUP_QUEUE = -1;
+    public static final int EPISODE_CLEANUP_NULL = -2;
+    public static final int EPISODE_CLEANUP_DEFAULT = 0;
 
     // Constants
     private static int EPISODE_CACHE_SIZE_UNLIMITED = -1;
     public static int FEED_ORDER_COUNTER = 0;
     public static int FEED_ORDER_ALPHABETICAL = 1;
+    public static int FEED_ORDER_LAST_UPDATE = 2;
     public static int FEED_COUNTER_SHOW_NEW_UNPLAYED_SUM = 0;
     public static int FEED_COUNTER_SHOW_NEW = 1;
     public static int FEED_COUNTER_SHOW_UNPLAYED = 2;
@@ -105,11 +123,10 @@ public class UserPreferences {
      *
      * @throws IllegalArgumentException if context is null
      */
-    public static void init(Context context) {
+    public static void init(@NonNull Context context) {
         Log.d(TAG, "Creating new instance of UserPreferences");
-        Validate.notNull(context);
 
-        UserPreferences.context = context;
+        UserPreferences.context = context.getApplicationContext();
         UserPreferences.prefs = PreferenceManager.getDefaultSharedPreferences(context);
 
         createImportDirectory();
@@ -136,7 +153,7 @@ public class UserPreferences {
 
     public static List<String> getHiddenDrawerItems() {
         String hiddenItems = prefs.getString(PREF_HIDDEN_DRAWER_ITEMS, "");
-        return new ArrayList<String>(Arrays.asList(StringUtils.split(hiddenItems, ',')));
+        return new ArrayList<>(Arrays.asList(TextUtils.split(hiddenItems, ",")));
     }
 
     public static int getFeedOrder() {
@@ -168,7 +185,16 @@ public class UserPreferences {
      * @return {@code true} if notifications are persistent, {@code false}  otherwise
      */
     public static boolean isPersistNotify() {
-        return prefs.getBoolean(PREF_PERSISTENT_NOTIFICATION, false);
+        return prefs.getBoolean(PREF_PERSISTENT_NOTIFICATION, true);
+    }
+
+    /**
+     * Returns true if notifications are persistent
+     *
+     * @return {@code true} if notifications are persistent, {@code false}  otherwise
+     */
+    public static boolean setLockscreenBackground() {
+        return prefs.getBoolean(PREF_LOCKSCREEN_BACKGROUND, true);
     }
 
     /**
@@ -197,10 +223,20 @@ public class UserPreferences {
         return prefs.getBoolean(PREF_UNPAUSE_ON_HEADSET_RECONNECT, true);
     }
 
+    public static boolean isUnpauseOnBluetoothReconnect() {
+        return prefs.getBoolean(PREF_UNPAUSE_ON_BLUETOOTH_RECONNECT, false);
+    }
+
+    public static boolean shouldHardwareButtonSkip() {
+        return prefs.getBoolean(PREF_HARDWARE_FOWARD_BUTTON_SKIPS, false);
+    }
+
 
     public static boolean isFollowQueue() {
-        return prefs.getBoolean(PREF_FOLLOW_QUEUE, false);
+        return prefs.getBoolean(PREF_FOLLOW_QUEUE, true);
     }
+
+    public static boolean shouldSkipKeepEpisode() { return prefs.getBoolean(PREF_SKIP_KEEPS_EPISODE, true); }
 
     public static boolean isAutoDelete() {
         return prefs.getBoolean(PREF_AUTO_DELETE, false);
@@ -215,16 +251,36 @@ public class UserPreferences {
     }
 
     public static String getPlaybackSpeed() {
-        return prefs.getString(PREF_PLAYBACK_SPEED, "1.0");
+        return prefs.getString(PREF_PLAYBACK_SPEED, "1.00");
     }
 
     public static String[] getPlaybackSpeedArray() {
         return readPlaybackSpeedArray(prefs.getString(PREF_PLAYBACK_SPEED_ARRAY, null));
     }
 
+    public static float getLeftVolume() {
+        int volume = prefs.getInt(PREF_LEFT_VOLUME, 100);
+        if(volume == 100) {
+            return 1.0f;
+        } else {
+            return (float) (1 - (Math.log(100 - volume) / Math.log(100)));
+        }
+    }
+
+    public static float getRightVolume() {
+        int volume = prefs.getInt(PREF_RIGHT_VOLUME, 100);
+        if(volume == 100) {
+            return 1.0f;
+        } else {
+            return (float) (1 - (Math.log(100 - volume) / Math.log(100)));
+        }
+    }
+
     public static boolean shouldPauseForFocusLoss() {
         return prefs.getBoolean(PREF_PAUSE_PLAYBACK_FOR_FOCUS_LOSS, false);
     }
+
+
 
     public static long getUpdateInterval() {
         String updateInterval = prefs.getString(PREF_UPDATE_INTERVAL, "0");
@@ -312,7 +368,7 @@ public class UserPreferences {
 
     public static String[] getAutodownloadSelectedNetworks() {
         String selectedNetWorks = prefs.getString(PREF_AUTODL_SELECTED_NETWORKS, "");
-        return StringUtils.split(selectedNetWorks, ',');
+        return TextUtils.split(selectedNetWorks, ",");
     }
 
     public static boolean shouldResumeAfterCall() {
@@ -351,9 +407,18 @@ public class UserPreferences {
              .apply();
     }
 
+    public static void setVolume(int leftVolume, int rightVolume) {
+        assert(0 <= leftVolume && leftVolume <= 100);
+        assert(0 <= rightVolume && rightVolume <= 100);
+        prefs.edit()
+             .putInt(PREF_LEFT_VOLUME, leftVolume)
+             .putInt(PREF_RIGHT_VOLUME, rightVolume)
+             .apply();
+    }
+
     public static void setAutodownloadSelectedNetworks(String[] value) {
         prefs.edit()
-             .putString(PREF_AUTODL_SELECTED_NETWORKS, StringUtils.join(value, ','))
+             .putString(PREF_AUTODL_SELECTED_NETWORKS, TextUtils.join(",", value))
              .apply();
     }
 
@@ -387,15 +452,17 @@ public class UserPreferences {
      *                            flattrd. Must be a value between 0 and 1 (inclusive)
      * */
     public static void setAutoFlattrSettings( boolean enabled, float autoFlattrThreshold) {
-        Validate.inclusiveBetween(0.0, 1.0, autoFlattrThreshold);
+        if(autoFlattrThreshold < 0.0 || autoFlattrThreshold > 1.0) {
+            throw new IllegalArgumentException("Flattr threshold must be in range [0.0, 1.0]");
+        }
         prefs.edit()
              .putBoolean(PREF_AUTO_FLATTR, enabled)
              .putFloat(PREF_AUTO_FLATTR_PLAYED_DURATION_THRESHOLD, autoFlattrThreshold)
              .apply();
     }
 
-    public static void setHiddenDrawerItems(Context context, List<String> items) {
-        String str = StringUtils.join(items, ',');
+    public static void setHiddenDrawerItems(List<String> items) {
+        String str = TextUtils.join(",", items);
         prefs.edit()
              .putString(PREF_HIDDEN_DRAWER_ITEMS, str)
              .apply();
@@ -436,7 +503,7 @@ public class UserPreferences {
         // If this preference hasn't been set yet, return the default options
         if (valueFromPrefs == null) {
             String[] allSpeeds = context.getResources().getStringArray(R.array.playback_speed_values);
-            List<String> speedList = new LinkedList<String>();
+            List<String> speedList = new ArrayList<>();
             for (String speedStr : allSpeeds) {
                 float speed = Float.parseFloat(speedStr);
                 if (speed < 2.0001 && speed * 10 % 1 == 0) {
@@ -459,6 +526,37 @@ public class UserPreferences {
         return selectedSpeeds;
     }
 
+    public static boolean useSonic() {
+        return prefs.getBoolean(PREF_SONIC, false);
+    }
+
+    public static void enableSonic(boolean enable) {
+        prefs.edit()
+            .putBoolean(PREF_SONIC, enable)
+            .apply();
+    }
+
+    public static boolean stereoToMono() {
+        return prefs.getBoolean(PREF_STEREO_TO_MONO, false);
+    }
+
+    public static void stereoToMono(boolean enable) {
+        prefs.edit()
+                .putBoolean(PREF_STEREO_TO_MONO, enable)
+                .apply();
+    }
+
+
+    public static EpisodeCleanupAlgorithm getEpisodeCleanupAlgorithm() {
+        int cleanupValue = Integer.valueOf(prefs.getString(PREF_EPISODE_CLEANUP, "-1"));
+        if (cleanupValue == EPISODE_CLEANUP_QUEUE) {
+            return new APQueueCleanupAlgorithm();
+        } else if (cleanupValue == EPISODE_CLEANUP_NULL) {
+            return new APNullCleanupAlgorithm();
+        } else {
+            return new APCleanupAlgorithm(cleanupValue);
+        }
+    }
 
     /**
      * Return the folder where the app stores all of its data. This method will
@@ -469,7 +567,7 @@ public class UserPreferences {
      * @return The data folder that has been requested or null if the folder
      * could not be created.
      */
-    public static File getDataFolder(Context context, String type) {
+    public static File getDataFolder(String type) {
         String strDir = prefs.getString(PREF_DATA_FOLDER, null);
         if (strDir == null) {
             Log.d(TAG, "Using default data folder");
@@ -491,7 +589,7 @@ public class UserPreferences {
                 for (int i = 0; i < dirs.length; i++) {
                     if (dirs.length > 0) {
                         if (i < dirs.length - 1) {
-                            dataDir = getDataFolder(context, dirs[i]);
+                            dataDir = getDataFolder(dirs[i]);
                             if (dataDir == null) {
                                 return null;
                             }
@@ -514,7 +612,7 @@ public class UserPreferences {
     }
 
     public static void setDataFolder(String dir) {
-        Log.d(TAG, "Result from DirectoryChooser: " + dir);
+        Log.d(TAG, "setDataFolder(dir: " + dir + ")");
         prefs.edit()
              .putString(PREF_DATA_FOLDER, dir)
              .apply();
@@ -542,7 +640,7 @@ public class UserPreferences {
      * available
      */
     private static void createImportDirectory() {
-        File importDir = getDataFolder(context, IMPORT_DIR);
+        File importDir = getDataFolder(IMPORT_DIR);
         if (importDir != null) {
             if (importDir.exists()) {
                 Log.d(TAG, "Import directory already exists");
@@ -576,8 +674,8 @@ public class UserPreferences {
     public static void restartUpdateIntervalAlarm(long triggerAtMillis, long intervalMillis) {
         Log.d(TAG, "Restarting update alarm.");
         AlarmManager alarmManager = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
-        PendingIntent updateIntent = PendingIntent.getBroadcast(context, 0,
-                new Intent(ClientConfig.applicationCallbacks.getApplicationInstance(), FeedUpdateReceiver.class), 0);
+        Intent intent = new Intent(context, FeedUpdateReceiver.class);
+        PendingIntent updateIntent = PendingIntent.getBroadcast(context, 0, intent, 0);
         alarmManager.cancel(updateIntent);
         if (intervalMillis > 0) {
             alarmManager.set(AlarmManager.ELAPSED_REALTIME_WAKEUP,
@@ -596,7 +694,7 @@ public class UserPreferences {
         Log.d(TAG, "Restarting update alarm.");
         AlarmManager alarmManager = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
         PendingIntent updateIntent = PendingIntent.getBroadcast(context, 0,
-                new Intent(ClientConfig.applicationCallbacks.getApplicationInstance(), FeedUpdateReceiver.class), 0);
+                new Intent(context, FeedUpdateReceiver.class), 0);
         alarmManager.cancel(updateIntent);
 
         Calendar now = Calendar.getInstance();
@@ -619,5 +717,4 @@ public class UserPreferences {
     public static int readEpisodeCacheSize(String valueFromPrefs) {
         return readEpisodeCacheSizeInternal(valueFromPrefs);
     }
-
 }

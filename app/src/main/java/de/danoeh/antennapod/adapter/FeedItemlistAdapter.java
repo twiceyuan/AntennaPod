@@ -2,7 +2,7 @@ package de.danoeh.antennapod.adapter;
 
 import android.content.Context;
 import android.content.res.TypedArray;
-import android.text.format.DateUtils;
+import android.support.v4.content.ContextCompat;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.View.OnClickListener;
@@ -11,6 +11,7 @@ import android.widget.Adapter;
 import android.widget.BaseAdapter;
 import android.widget.ImageButton;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 
@@ -20,7 +21,9 @@ import de.danoeh.antennapod.R;
 import de.danoeh.antennapod.core.feed.FeedItem;
 import de.danoeh.antennapod.core.feed.FeedMedia;
 import de.danoeh.antennapod.core.feed.MediaType;
+import de.danoeh.antennapod.core.preferences.UserPreferences;
 import de.danoeh.antennapod.core.storage.DownloadRequester;
+import de.danoeh.antennapod.core.util.DateUtils;
 import de.danoeh.antennapod.core.util.ThemeUtils;
 
 /**
@@ -39,6 +42,9 @@ public class FeedItemlistAdapter extends BaseAdapter {
 
     public static final int SELECTION_NONE = -1;
 
+    private final int playingBackGroundColor;
+    private final int normalBackGroundColor;
+
     public FeedItemlistAdapter(Context context,
                                ItemAccess itemAccess,
                                ActionButtonCallback callback,
@@ -52,6 +58,13 @@ public class FeedItemlistAdapter extends BaseAdapter {
         this.selectedItemIndex = SELECTION_NONE;
         this.actionButtonUtils = new ActionButtonUtils(context);
         this.makePlayedItemsTransparent = makePlayedItemsTransparent;
+
+        if(UserPreferences.getTheme() == R.style.Theme_AntennaPod_Dark) {
+            playingBackGroundColor = ContextCompat.getColor(context, R.color.highlight_dark);
+        } else {
+            playingBackGroundColor = ContextCompat.getColor(context, R.color.highlight_light);
+        }
+        normalBackGroundColor = ContextCompat.getColor(context, android.R.color.transparent);
     }
 
     @Override
@@ -80,6 +93,8 @@ public class FeedItemlistAdapter extends BaseAdapter {
             LayoutInflater inflater = (LayoutInflater) context
                     .getSystemService(Context.LAYOUT_INFLATER_SERVICE);
             convertView = inflater.inflate(R.layout.feeditemlist_item, parent, false);
+            holder.container = (LinearLayout) convertView
+                    .findViewById(R.id.container);
             holder.title = (TextView) convertView
                     .findViewById(R.id.txtvItemname);
             holder.lenSize = (TextView) convertView
@@ -104,8 +119,8 @@ public class FeedItemlistAdapter extends BaseAdapter {
         if (!(getItemViewType(position) == Adapter.IGNORE_ITEM_VIEW_TYPE)) {
             convertView.setVisibility(View.VISIBLE);
             if (position == selectedItemIndex) {
-                convertView.setBackgroundColor(convertView.getResources()
-                        .getColor(ThemeUtils.getSelectionBackgroundColor()));
+                convertView.setBackgroundColor(ContextCompat.getColor(convertView.getContext(),
+                        ThemeUtils.getSelectionBackgroundColor()));
             } else {
                 convertView.setBackgroundResource(0);
             }
@@ -129,8 +144,8 @@ public class FeedItemlistAdapter extends BaseAdapter {
                 ViewHelper.setAlpha(convertView, 1.0f);
             }
 
-            holder.published.setText(DateUtils.formatDateTime(context, item.getPubDate().getTime(), DateUtils.FORMAT_ABBREV_ALL));
-
+            String pubDateStr = DateUtils.formatAbbrev(context, item.getPubDate());
+            holder.published.setText(pubDateStr);
 
             FeedMedia media = item.getMedia();
             if (media == null) {
@@ -174,9 +189,18 @@ public class FeedItemlistAdapter extends BaseAdapter {
                     holder.type.setImageBitmap(null);
                     holder.type.setVisibility(View.GONE);
                 }
+
+                if(media.isCurrentlyPlaying()) {
+                    if(media.isCurrentlyPlaying()) {
+                        holder.container.setBackgroundColor(playingBackGroundColor);
+                    } else {
+                        holder.container.setBackgroundColor(normalBackGroundColor);
+                    }
+                }
             }
 
-            actionButtonUtils.configureActionButton(holder.butAction, item);
+            boolean isInQueue = itemAccess.isInQueue(item);
+            actionButtonUtils.configureActionButton(holder.butAction, item, isInQueue);
             holder.butAction.setFocusable(false);
             holder.butAction.setTag(item);
             holder.butAction.setOnClickListener(butActionListener);
@@ -196,6 +220,7 @@ public class FeedItemlistAdapter extends BaseAdapter {
     };
 
     static class Holder {
+        LinearLayout container;
         TextView title;
         TextView published;
         TextView lenSize;

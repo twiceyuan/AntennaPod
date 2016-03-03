@@ -1,6 +1,5 @@
 package de.danoeh.antennapod.core.util.flattr;
 
-import android.app.AlertDialog;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.DialogInterface.OnClickListener;
@@ -8,9 +7,10 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.net.Uri;
 import android.preference.PreferenceManager;
+import android.support.v7.app.AlertDialog;
+import android.text.TextUtils;
 import android.util.Log;
 
-import org.apache.commons.lang3.StringUtils;
 import org.shredzone.flattr4j.FlattrService;
 import org.shredzone.flattr4j.exception.FlattrException;
 import org.shredzone.flattr4j.model.Flattr;
@@ -78,8 +78,8 @@ public class FlattrUtils {
      * Returns true if FLATTR_APP_KEY and FLATTR_APP_SECRET in BuildConfig are not null and not empty
      */
     public static boolean hasAPICredentials() {
-        return StringUtils.isNotEmpty(ClientConfig.flattrCallbacks.getFlattrAppKey())
-                && StringUtils.isNotEmpty(ClientConfig.flattrCallbacks.getFlattrAppSecret());
+        return !TextUtils.isEmpty(ClientConfig.flattrCallbacks.getFlattrAppKey())
+                && !TextUtils.isEmpty(ClientConfig.flattrCallbacks.getFlattrAppSecret());
     }
 
     public static boolean hasToken() {
@@ -167,7 +167,7 @@ public class FlattrUtils {
         deleteToken();
         FlattrServiceCreator.deleteFlattrService();
         showRevokeDialog(context);
-        DBWriter.clearAllFlattrStatus(context);
+        DBWriter.clearAllFlattrStatus();
     }
 
     // ------------------------------------------------ DIALOGS

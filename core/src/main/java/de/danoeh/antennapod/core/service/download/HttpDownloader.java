@@ -1,16 +1,15 @@
 package de.danoeh.antennapod.core.service.download;
 
+import android.text.TextUtils;
 import android.util.Log;
 
 import com.squareup.okhttp.OkHttpClient;
+import com.squareup.okhttp.Protocol;
 import com.squareup.okhttp.Request;
 import com.squareup.okhttp.Response;
 import com.squareup.okhttp.ResponseBody;
-import com.squareup.okhttp.internal.http.HttpDate;
 
 import org.apache.commons.io.IOUtils;
-import org.apache.commons.lang3.StringUtils;
-import org.apache.http.HttpStatus;
 
 import java.io.BufferedInputStream;
 import java.io.File;
@@ -22,11 +21,13 @@ import java.net.HttpURLConnection;
 import java.net.SocketTimeoutException;
 import java.net.URI;
 import java.net.UnknownHostException;
+import java.util.Arrays;
 import java.util.Date;
 
 import de.danoeh.antennapod.core.ClientConfig;
 import de.danoeh.antennapod.core.R;
 import de.danoeh.antennapod.core.feed.FeedImage;
+import de.danoeh.antennapod.core.util.DateUtils;
 import de.danoeh.antennapod.core.util.DownloadError;
 import de.danoeh.antennapod.core.util.StorageUtils;
 import de.danoeh.antennapod.core.util.URIUtil;
@@ -66,13 +67,19 @@ public class HttpDownloader extends Downloader {
             final URI uri = URIUtil.getURIFromRequestUrl(request.getSource());
             Request.Builder httpReq = new Request.Builder().url(uri.toURL())
                     .header("User-Agent", ClientConfig.USER_AGENT);
-            if(request.getIfModifiedSince() > 0) {
-                long threeDaysAgo = System.currentTimeMillis() - 1000*60*60*24*3;
-                if(request.getIfModifiedSince() > threeDaysAgo) {
-                    Date date = new Date(request.getIfModifiedSince());
-                    String httpDate = HttpDate.format(date);
-                    Log.d(TAG, "addHeader(\"If-Modified-Since\", \"" + httpDate + "\")");
-                    httpReq.addHeader("If-Modified-Since", httpDate);
+            if(!TextUtils.isEmpty(request.getLastModified())) {
+                String lastModified = request.getLastModified();
+                Date lastModifiedDate = DateUtils.parse(lastModified);
+                if(lastModifiedDate != null) {
+                    long threeDaysAgo = System.currentTimeMillis() - 1000 * 60 * 60 * 24 * 3;
+                    if (lastModifiedDate.getTime() > threeDaysAgo) {
+                        Log.d(TAG, "addHeader(\"If-Modified-Since\", \"" + lastModified + "\")");
+                        httpReq.addHeader("If-Modified-Since", lastModified);
+                    }
+                } else {
+                    String eTag = lastModified;
+                    Log.d(TAG, "addHeader(\"If-None-Match\", \"" + eTag + "\")");
+                    httpReq.addHeader("If-None-Match", eTag);
                 }
             }
 
@@ -84,7 +91,7 @@ public class HttpDownloader extends Downloader {
                     String credentials = encodeCredentials(parts[0], parts[1], "ISO-8859-1");
                     httpReq.header("Authorization", credentials);
                 }
-            } else if (!StringUtils.isEmpty(request.getUsername()) && request.getPassword() != null) {
+            } else if (!TextUtils.isEmpty(request.getUsername()) && request.getPassword() != null) {
                 String credentials = encodeCredentials(request.getUsername(), request.getPassword(),
                         "ISO-8859-1");
                 httpReq.header("Authorization", credentials);
@@ -93,15 +100,29 @@ public class HttpDownloader extends Downloader {
             // add range header if necessary
             if (fileExists) {
                 request.setSoFar(destination.length());
-                httpReq.addHeader("Range",
-                        "bytes=" + request.getSoFar() + "-");
+                httpReq.addHeader("Range", "bytes=" + request.getSoFar() + "-");
                 Log.d(TAG, "Adding range header: " + request.getSoFar());
             }
 
-            Response response = httpClient.newCall(httpReq.build()).execute();
+            Response response = null;
+            try {
+                response = httpClient.newCall(httpReq.build()).execute();
+            } catch(IOException e) {
+                Log.e(TAG, e.toString());
+                if(e.getMessage().contains("PROTOCOL_ERROR")) {
+                    httpClient.setProtocols(Arrays.asList(Protocol.HTTP_1_1));
+                    response = httpClient.newCall(httpReq.build()).execute();
+                }
+                else {
+                    throw e;
+                }
+            }
             responseBody = response.body();
             String contentEncodingHeader = response.header("Content-Encoding");
-            boolean isGzip = StringUtils.equalsIgnoreCase(contentEncodingHeader, "gzip");
+            boolean isGzip = false;
+            if(!TextUtils.isEmpty(contentEncodingHeader)) {
+                isGzip = TextUtils.equals(contentEncodingHeader.toLowerCase(), "gzip");
+            }
 
             Log.d(TAG, "Response code is " + response.code());
 
@@ -113,7 +134,7 @@ public class HttpDownloader extends Downloader {
                         String credentials = encodeCredentials(parts[0], parts[1], "UTF-8");
                         httpReq.header("Authorization", credentials);
                     }
-                } else if (!StringUtils.isEmpty(request.getUsername()) && request.getPassword() != null) {
+                } else if (!TextUtils.isEmpty(request.getUsername()) && request.getPassword() != null) {
                     String credentials = encodeCredentials(request.getUsername(), request.getPassword(),
                             "UTF-8");
                     httpReq.header("Authorization", credentials);
@@ -121,7 +142,9 @@ public class HttpDownloader extends Downloader {
                 response = httpClient.newCall(httpReq.build()).execute();
                 responseBody = response.body();
                 contentEncodingHeader = response.header("Content-Encoding");
-                isGzip = StringUtils.equalsIgnoreCase(contentEncodingHeader, "gzip");
+                if(!TextUtils.isEmpty(contentEncodingHeader)) {
+                    isGzip = TextUtils.equals(contentEncodingHeader.toLowerCase(), "gzip");
+                }
             }
 
             if(!response.isSuccessful() && response.code() == HttpURLConnection.HTTP_NOT_MODIFIED) {
@@ -144,7 +167,7 @@ public class HttpDownloader extends Downloader {
                 return;
             }
 
-            if (!StorageUtils.storageAvailable(ClientConfig.applicationCallbacks.getApplicationInstance())) {
+            if (!StorageUtils.storageAvailable()) {
                 onFail(DownloadError.ERROR_DEVICE_NOT_FOUND, null);
                 return;
             }
@@ -153,8 +176,8 @@ public class HttpDownloader extends Downloader {
 
             String contentRangeHeader = (fileExists) ? response.header("Content-Range") : null;
 
-            if (fileExists && response.code() == HttpStatus.SC_PARTIAL_CONTENT
-                    && !StringUtils.isEmpty(contentRangeHeader)) {
+            if (fileExists && response.code() == HttpURLConnection.HTTP_PARTIAL
+                    && !TextUtils.isEmpty(contentRangeHeader)) {
                 String start = contentRangeHeader.substring("bytes ".length(),
                         contentRangeHeader.indexOf("-"));
                 request.setSoFar(Long.valueOf(start));
@@ -217,6 +240,12 @@ public class HttpDownloader extends Downloader {
                 } else if(request.getSize() > 0 && request.getSoFar() == 0){
                     onFail(DownloadError.ERROR_IO_ERROR, "Download completed, but nothing was read");
                     return;
+                }
+                String lastModified = response.header("Last-Modified");
+                if(lastModified != null) {
+                    request.setLastModified(lastModified);
+                } else {
+                    request.setLastModified(response.header("ETag"));
                 }
                 onSuccess();
             }

@@ -3,13 +3,11 @@ package de.danoeh.antennapod.receiver;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.text.TextUtils;
 import android.util.Log;
 import android.widget.Toast;
 
-import org.apache.commons.lang3.StringUtils;
-
 import java.util.Arrays;
-import java.util.Date;
 
 import de.danoeh.antennapod.BuildConfig;
 import de.danoeh.antennapod.R;
@@ -29,14 +27,14 @@ public class SPAReceiver extends BroadcastReceiver{
 
     @Override
     public void onReceive(Context context, Intent intent) {
-        if (StringUtils.equals(intent.getAction(), ACTION_SP_APPS_QUERY_FEEDS_REPSONSE)) {
+        if (TextUtils.equals(intent.getAction(), ACTION_SP_APPS_QUERY_FEEDS_REPSONSE)) {
             if (BuildConfig.DEBUG) Log.d(TAG, "Received SP_APPS_QUERY_RESPONSE");
             if (intent.hasExtra(ACTION_SP_APPS_QUERY_FEEDS_REPSONSE_FEEDS_EXTRA)) {
                 String[] feedUrls = intent.getStringArrayExtra(ACTION_SP_APPS_QUERY_FEEDS_REPSONSE_FEEDS_EXTRA);
                 if (feedUrls != null) {
                     if (BuildConfig.DEBUG) Log.d(TAG, "Received feeds list: " + Arrays.toString(feedUrls));
                     for (String url : feedUrls) {
-                        Feed f  = new Feed(url, new Date(0));
+                        Feed f  = new Feed(url, null);
                         try {
                             DownloadRequester.getInstance().downloadFeed(context, f);
                         } catch (DownloadRequestException e) {
