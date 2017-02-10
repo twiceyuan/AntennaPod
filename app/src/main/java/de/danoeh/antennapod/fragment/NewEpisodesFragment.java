@@ -7,6 +7,8 @@ import android.support.v7.widget.RecyclerView;
 import android.support.v7.widget.helper.ItemTouchHelper;
 import android.util.Log;
 import android.view.LayoutInflater;
+import android.view.Menu;
+import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 
@@ -14,12 +16,13 @@ import java.util.List;
 
 import de.danoeh.antennapod.R;
 import de.danoeh.antennapod.adapter.AllEpisodesRecycleAdapter;
-import de.danoeh.antennapod.core.event.QueueEvent;
+import de.danoeh.antennapod.core.event.FeedItemEvent;
 import de.danoeh.antennapod.core.feed.FeedItem;
 import de.danoeh.antennapod.core.feed.FeedMedia;
 import de.danoeh.antennapod.core.preferences.UserPreferences;
 import de.danoeh.antennapod.core.storage.DBReader;
 import de.danoeh.antennapod.core.storage.DBWriter;
+import de.danoeh.antennapod.core.util.FeedItemUtil;
 
 
 /**
@@ -39,14 +42,24 @@ public class NewEpisodesFragment extends AllEpisodesFragment {
     @Override
     protected String getPrefName() { return PREF_NAME; }
 
-    public void onEvent(QueueEvent event) {
-        Log.d(TAG, "onEvent() called with: " + "event = [" + event + "]");
-        loadItems();
-    }
-
     @Override
     protected void resetViewState() {
         super.resetViewState();
+    }
+
+    @Override
+    public void onEventMainThread(FeedItemEvent event) {
+        Log.d(TAG, "onEventMainThread() called with: " + "event = [" + event + "]");
+        if(episodes == null) {
+            return;
+        }
+        for(FeedItem item : event.items) {
+            int pos = FeedItemUtil.indexOfItemWithId(episodes, item.getId());
+            if(pos >= 0 && item.isTagged(FeedItem.TAG_QUEUE)) {
+                episodes.remove(pos);
+                listAdapter.notifyItemRemoved(pos);
+            }
+        }
     }
 
     @Override
@@ -81,7 +94,7 @@ public class NewEpisodesFragment extends AllEpisodesFragment {
                     }
                 };
 
-                Snackbar snackbar = Snackbar.make(root, getString(R.string.marked_as_read_label),
+                Snackbar snackbar = Snackbar.make(root, getString(R.string.marked_as_seen_label),
                         Snackbar.LENGTH_LONG);
                 snackbar.setAction(getString(R.string.undo), v -> {
                     DBWriter.markItemPlayed(FeedItem.NEW, item.getId());

@@ -2,7 +2,9 @@ package de.danoeh.antennapod.adapter;
 
 import android.content.Context;
 import android.content.res.TypedArray;
+import android.os.Build;
 import android.support.v4.content.ContextCompat;
+import android.text.Layout;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.View.OnClickListener;
@@ -24,6 +26,7 @@ import de.danoeh.antennapod.core.feed.MediaType;
 import de.danoeh.antennapod.core.preferences.UserPreferences;
 import de.danoeh.antennapod.core.storage.DownloadRequester;
 import de.danoeh.antennapod.core.util.DateUtils;
+import de.danoeh.antennapod.core.util.LongList;
 import de.danoeh.antennapod.core.util.ThemeUtils;
 
 /**
@@ -84,6 +87,7 @@ public class FeedItemlistAdapter extends BaseAdapter {
     }
 
     @Override
+    @SuppressWarnings("ResourceType")
     public View getView(final int position, View convertView, ViewGroup parent) {
         Holder holder;
         final FeedItem item = getItem(position);
@@ -95,8 +99,10 @@ public class FeedItemlistAdapter extends BaseAdapter {
             convertView = inflater.inflate(R.layout.feeditemlist_item, parent, false);
             holder.container = (LinearLayout) convertView
                     .findViewById(R.id.container);
-            holder.title = (TextView) convertView
-                    .findViewById(R.id.txtvItemname);
+            holder.title = (TextView) convertView.findViewById(R.id.txtvItemname);
+            if(Build.VERSION.SDK_INT >= 23) {
+                holder.title.setHyphenationFrequency(Layout.HYPHENATION_FREQUENCY_FULL);
+            }
             holder.lenSize = (TextView) convertView
                     .findViewById(R.id.txtvLenSize);
             holder.butAction = (ImageButton) convertView
@@ -147,6 +153,8 @@ public class FeedItemlistAdapter extends BaseAdapter {
             String pubDateStr = DateUtils.formatAbbrev(context, item.getPubDate());
             holder.published.setText(pubDateStr);
 
+            boolean isInQueue = item.isTagged(FeedItem.TAG_QUEUE);
+
             FeedMedia media = item.getMedia();
             if (media == null) {
                 holder.episodeProgress.setVisibility(View.GONE);
@@ -157,7 +165,7 @@ public class FeedItemlistAdapter extends BaseAdapter {
 
                 AdapterUtils.updateEpisodePlaybackProgress(item, holder.lenSize, holder.episodeProgress);
 
-                if (itemAccess.isInQueue(item)) {
+                if (isInQueue) {
                     holder.inPlaylist.setVisibility(View.VISIBLE);
                 } else {
                     holder.inPlaylist.setVisibility(View.INVISIBLE);
@@ -189,17 +197,15 @@ public class FeedItemlistAdapter extends BaseAdapter {
                     holder.type.setImageBitmap(null);
                     holder.type.setVisibility(View.GONE);
                 }
+                typeDrawables.recycle();
 
                 if(media.isCurrentlyPlaying()) {
-                    if(media.isCurrentlyPlaying()) {
-                        holder.container.setBackgroundColor(playingBackGroundColor);
-                    } else {
-                        holder.container.setBackgroundColor(normalBackGroundColor);
-                    }
+                    holder.container.setBackgroundColor(playingBackGroundColor);
+                } else {
+                    holder.container.setBackgroundColor(normalBackGroundColor);
                 }
             }
 
-            boolean isInQueue = itemAccess.isInQueue(item);
             actionButtonUtils.configureActionButton(holder.butAction, item, isInQueue);
             holder.butAction.setFocusable(false);
             holder.butAction.setTag(item);
@@ -215,7 +221,7 @@ public class FeedItemlistAdapter extends BaseAdapter {
         @Override
         public void onClick(View v) {
             FeedItem item = (FeedItem) v.getTag();
-            callback.onActionButtonPressed(item);
+            callback.onActionButtonPressed(item, itemAccess.getQueueIds());
         }
     };
 
@@ -233,13 +239,13 @@ public class FeedItemlistAdapter extends BaseAdapter {
 
     public interface ItemAccess {
 
-        boolean isInQueue(FeedItem item);
-
         int getItemDownloadProgressPercent(FeedItem item);
 
         int getCount();
 
         FeedItem getItem(int position);
+
+        LongList getQueueIds();
 
     }
 

@@ -39,44 +39,29 @@ public class AddFeedFragment extends Fragment {
             etxtFeedurl.setText(args.getString(ARG_FEED_URL));
         }
 
+        Button butSearchITunes = (Button) root.findViewById(R.id.butSearchItunes);
         Button butBrowserGpoddernet = (Button) root.findViewById(R.id.butBrowseGpoddernet);
+        Button butSearchFyyd = (Button) root.findViewById(R.id.butSearchFyyd);
         Button butOpmlImport = (Button) root.findViewById(R.id.butOpmlImport);
         Button butConfirm = (Button) root.findViewById(R.id.butConfirm);
-        Button butSearchITunes = (Button) root.findViewById(R.id.butSearchItunes);
 
         final MainActivity activity = (MainActivity) getActivity();
         activity.getSupportActionBar().setTitle(R.string.add_feed_label);
 
-        butSearchITunes.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                activity.loadChildFragment(new ItunesSearchFragment());
-            }
-        });
+        butSearchITunes.setOnClickListener(v -> activity.loadChildFragment(new ItunesSearchFragment()));
 
-        butBrowserGpoddernet.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                activity.loadChildFragment(new GpodnetMainFragment());
-            }
-        });
+        butBrowserGpoddernet.setOnClickListener(v -> activity.loadChildFragment(new GpodnetMainFragment()));
 
-        butOpmlImport.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                startActivity(new Intent(getActivity(),
-                        OpmlImportFromPathActivity.class));
-            }
-        });
+        butSearchFyyd.setOnClickListener(v -> activity.loadChildFragment(new FyydSearchFragment()));
 
-        butConfirm.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                Intent intent = new Intent(getActivity(), OnlineFeedViewActivity.class);
-                intent.putExtra(OnlineFeedViewActivity.ARG_FEEDURL, etxtFeedurl.getText().toString());
-                intent.putExtra(OnlineFeedViewActivity.ARG_TITLE, getString(R.string.add_feed_label));
-                startActivity(intent);
-            }
+        butOpmlImport.setOnClickListener(v -> startActivity(new Intent(getActivity(),
+                OpmlImportFromPathActivity.class)));
+
+        butConfirm.setOnClickListener(v -> {
+            Intent intent = new Intent(getActivity(), OnlineFeedViewActivity.class);
+            intent.putExtra(OnlineFeedViewActivity.ARG_FEEDURL, etxtFeedurl.getText().toString());
+            intent.putExtra(OnlineFeedViewActivity.ARG_TITLE, getString(R.string.add_feed_label));
+            startActivity(intent);
         });
 
         return root;

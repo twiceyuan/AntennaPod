@@ -8,7 +8,7 @@ import android.os.Bundle;
 import android.preference.Preference;
 import android.preference.PreferenceFragment;
 import android.support.v7.app.ActionBar;
-import android.support.v7.app.ActionBarActivity;
+import android.support.v7.app.AppCompatActivity;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.ViewGroup;
@@ -24,13 +24,11 @@ import de.danoeh.antennapod.preferences.PreferenceController;
  * PreferenceActivity for API 11+. In order to change the behavior of the preference UI, see
  * PreferenceController.
  */
-public class PreferenceActivity extends ActionBarActivity {
+public class PreferenceActivity extends AppCompatActivity {
 
+    private static WeakReference<PreferenceActivity> instance;
     private PreferenceController preferenceController;
     private MainFragment prefFragment;
-    private static WeakReference<PreferenceActivity> instance;
-
-
     private final PreferenceController.PreferenceUI preferenceUI = new PreferenceController.PreferenceUI() {
         @TargetApi(Build.VERSION_CODES.HONEYCOMB)
         @Override
@@ -49,7 +47,7 @@ public class PreferenceActivity extends ActionBarActivity {
     protected void onCreate(Bundle savedInstanceState) {
         // This must be the FIRST thing we do, otherwise other code may not have the
         // reference it needs
-        instance = new WeakReference<PreferenceActivity>(this);
+        instance = new WeakReference<>(this);
 
         setTheme(UserPreferences.getTheme());
         super.onCreate(savedInstanceState);
@@ -103,6 +101,7 @@ public class PreferenceActivity extends ActionBarActivity {
         @Override
         public void onCreate(Bundle savedInstanceState) {
             super.onCreate(savedInstanceState);
+            setRetainInstance(true);
             addPreferencesFromResource(R.xml.preferences);
             PreferenceActivity activity = instance.get();
             if(activity != null && activity.preferenceController != null) {
@@ -117,6 +116,24 @@ public class PreferenceActivity extends ActionBarActivity {
             if(activity != null && activity.preferenceController != null) {
                 activity.preferenceController.onResume();
             }
+        }
+
+        @Override
+        public void onPause() {
+            PreferenceActivity activity = instance.get();
+            if(activity != null && activity.preferenceController != null) {
+                activity.preferenceController.onPause();
+            }
+            super.onPause();
+        }
+
+        @Override
+        public void onStop() {
+            PreferenceActivity activity = instance.get();
+            if(activity != null && activity.preferenceController != null) {
+                activity.preferenceController.onStop();
+            }
+            super.onStop();
         }
     }
 }

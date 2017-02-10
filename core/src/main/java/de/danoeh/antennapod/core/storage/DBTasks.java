@@ -2,6 +2,7 @@ package de.danoeh.antennapod.core.storage;
 
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.database.Cursor;
 import android.util.Log;
 
@@ -16,7 +17,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.FutureTask;
-import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import de.danoeh.antennapod.core.ClientConfig;
@@ -27,14 +28,19 @@ import de.danoeh.antennapod.core.feed.Feed;
 import de.danoeh.antennapod.core.feed.FeedItem;
 import de.danoeh.antennapod.core.feed.FeedMedia;
 import de.danoeh.antennapod.core.feed.FeedPreferences;
+import de.danoeh.antennapod.core.preferences.UserPreferences;
 import de.danoeh.antennapod.core.service.GpodnetSyncService;
 import de.danoeh.antennapod.core.service.download.DownloadStatus;
 import de.danoeh.antennapod.core.service.playback.PlaybackService;
+import de.danoeh.antennapod.core.util.Converter;
 import de.danoeh.antennapod.core.util.DownloadError;
 import de.danoeh.antennapod.core.util.LongList;
 import de.danoeh.antennapod.core.util.comparator.FeedItemPubdateComparator;
 import de.danoeh.antennapod.core.util.exception.MediaFileNotFoundException;
 import de.danoeh.antennapod.core.util.flattr.FlattrUtils;
+
+import static android.content.Context.MODE_PRIVATE;
+import static android.provider.Contacts.SettingsColumns.KEY;
 
 /**
  * Provides methods for doing common tasks that use DBReader and DBWriter.
@@ -42,19 +48,19 @@ import de.danoeh.antennapod.core.util.flattr.FlattrUtils;
 public final class DBTasks {
     private static final String TAG = "DBTasks";
 
+    public static final String PREF_NAME = "dbtasks";
+    private static final String PREF_LAST_REFRESH = "last_refresh";
+
     /**
      * Executor service used by the autodownloadUndownloadedEpisodes method.
      */
     private static ExecutorService autodownloadExec;
 
     static {
-        autodownloadExec = Executors.newSingleThreadExecutor(new ThreadFactory() {
-            @Override
-            public Thread newThread(Runnable r) {
-                Thread t = new Thread(r);
-                t.setPriority(Thread.MIN_PRIORITY);
-                return t;
-            }
+        autodownloadExec = Executors.newSingleThreadExecutor(r -> {
+            Thread t = new Thread(r);
+            t.setPriority(Thread.MIN_PRIORITY);
+            return t;
         });
     }
 
@@ -85,9 +91,7 @@ public final class DBTasks {
         if (feedID != 0) {
             try {
                 DBWriter.deleteFeed(context, feedID).get();
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            } catch (ExecutionException e) {
+            } catch (InterruptedException | ExecutionException e) {
                 e.printStackTrace();
             }
         } else {
@@ -114,7 +118,7 @@ public final class DBTasks {
                                  boolean showPlayer, boolean startWhenPrepared, boolean shouldStream) {
         try {
             if (!shouldStream) {
-                if (media.fileExists() == false) {
+                if (!media.fileExists()) {
                     throw new MediaFileNotFoundException(
                             "No episode was found at " + media.getFile_url(),
                             media);
@@ -166,6 +170,9 @@ public final class DBTasks {
                         refreshFeeds(context, DBReader.getFeedList());
                     }
                     isRefreshing.set(false);
+
+                    SharedPreferences prefs = context.getSharedPreferences(PREF_NAME, MODE_PRIVATE);
+                    prefs.edit().putLong(PREF_LAST_REFRESH, System.currentTimeMillis()).apply();
 
                     if (FlattrUtils.hasToken()) {
                         Log.d(TAG, "Flattring all pending things.");
@@ -316,6 +323,31 @@ public final class DBTasks {
         }
         f.setId(feed.getId());
         DownloadRequester.getInstance().downloadFeed(context, f, loadAllPages, force);
+    }
+
+    /*
+     *  Checks if the app should refresh all feeds, i.e. if the last auto refresh failed.
+     *
+     *  The feeds are only refreshed if an update interval or time of day is set and the last
+     *  (successful) refresh was before the last interval or more than a day ago, respectively.
+     */
+    public static void checkShouldRefreshFeeds(Context context) {
+        long interval = 0;
+        if(UserPreferences.getUpdateInterval() > 0) {
+            interval = UserPreferences.getUpdateInterval();
+        } else if(UserPreferences.getUpdateTimeOfDay().length > 0){
+            interval = TimeUnit.DAYS.toMillis(1);
+        }
+        if(interval == 0) { // auto refresh is disabled
+            return;
+        }
+        SharedPreferences prefs = context.getSharedPreferences(PREF_NAME, MODE_PRIVATE);
+        long lastRefresh = prefs.getLong(PREF_LAST_REFRESH, 0);
+        Log.d(TAG, "last refresh: " + Converter.getDurationStringLocalized(context,
+                System.currentTimeMillis() - lastRefresh) + " ago");
+        if(lastRefresh <= System.currentTimeMillis() - interval) {
+            DBTasks.refreshAllFeeds(context, null);
+        }
     }
 
     /**
@@ -518,8 +550,8 @@ public final class DBTasks {
      */
     public static synchronized Feed[] updateFeed(final Context context,
                                                  final Feed... newFeeds) {
-        List<Feed> newFeedsList = new ArrayList<Feed>();
-        List<Feed> updatedFeedsList = new ArrayList<Feed>();
+        List<Feed> newFeedsList = new ArrayList<>();
+        List<Feed> updatedFeedsList = new ArrayList<>();
         Feed[] resultFeeds = new Feed[newFeeds.length];
         PodDBAdapter adapter = PodDBAdapter.getInstance();
         adapter.open();
@@ -582,12 +614,13 @@ public final class DBTasks {
                         item.setAutoDownload(savedFeed.getPreferences().getAutoDownload());
                         savedFeed.getItems().add(idx, item);
 
-                        // only mark the item new if it actually occurs
-                        // before the most recent item (before we started adding things)
+                        // only mark the item new if it was published after or at the same time
+                        // as the most recent item
                         // (if the most recent date is null then we can assume there are no items
                         // and this is the first, hence 'new')
                         if (priorMostRecentDate == null ||
-                                priorMostRecentDate.before(item.getPubDate())) {
+                                priorMostRecentDate.before(item.getPubDate()) ||
+                                priorMostRecentDate.equals(item.getPubDate())) {
                             Log.d(TAG, "Marking item published on " + item.getPubDate() +
                                     " new, prior most recent date = " + priorMostRecentDate);
                             item.setNew();
@@ -611,9 +644,7 @@ public final class DBTasks {
         try {
             DBWriter.addNewFeed(context, newFeedsList.toArray(new Feed[newFeedsList.size()])).get();
             DBWriter.setCompleteFeed(updatedFeedsList.toArray(new Feed[updatedFeedsList.size()])).get();
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        } catch (ExecutionException e) {
+        } catch (InterruptedException | ExecutionException e) {
             e.printStackTrace();
         }
 
@@ -633,7 +664,7 @@ public final class DBTasks {
      */
     public static FutureTask<List<FeedItem>> searchFeedItemTitle(final Context context,
                                                                  final long feedID, final String query) {
-        return new FutureTask<List<FeedItem>>(new QueryTask<List<FeedItem>>(context) {
+        return new FutureTask<>(new QueryTask<List<FeedItem>>(context) {
             @Override
             public void execute(PodDBAdapter adapter) {
                 Cursor searchResult = adapter.searchItemTitles(feedID,
@@ -657,7 +688,7 @@ public final class DBTasks {
      */
     public static FutureTask<List<FeedItem>> searchFeedItemDescription(final Context context,
                                                                        final long feedID, final String query) {
-        return new FutureTask<List<FeedItem>>(new QueryTask<List<FeedItem>>(context) {
+        return new FutureTask<>(new QueryTask<List<FeedItem>>(context) {
             @Override
             public void execute(PodDBAdapter adapter) {
                 Cursor searchResult = adapter.searchItemDescriptions(feedID,
@@ -681,7 +712,7 @@ public final class DBTasks {
      */
     public static FutureTask<List<FeedItem>> searchFeedItemContentEncoded(final Context context,
                                                                           final long feedID, final String query) {
-        return new FutureTask<List<FeedItem>>(new QueryTask<List<FeedItem>>(context) {
+        return new FutureTask<>(new QueryTask<List<FeedItem>>(context) {
             @Override
             public void execute(PodDBAdapter adapter) {
                 Cursor searchResult = adapter.searchItemContentEncoded(feedID,
@@ -704,7 +735,7 @@ public final class DBTasks {
      */
     public static FutureTask<List<FeedItem>> searchFeedItemChapters(final Context context,
                                                                     final long feedID, final String query) {
-        return new FutureTask<List<FeedItem>>(new QueryTask<List<FeedItem>>(context) {
+        return new FutureTask<>(new QueryTask<List<FeedItem>>(context) {
             @Override
             public void execute(PodDBAdapter adapter) {
                 Cursor searchResult = adapter.searchItemChapters(feedID,
@@ -723,7 +754,7 @@ public final class DBTasks {
      * This class automatically creates a PodDBAdapter object and closes it when
      * it is no longer in use.
      */
-    static abstract class QueryTask<T> implements Callable<T> {
+    abstract static class QueryTask<T> implements Callable<T> {
         private T result;
         private Context context;
 

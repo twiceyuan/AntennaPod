@@ -7,8 +7,8 @@ import android.content.Intent;
 import android.os.Bundle;
 import android.os.Looper;
 import android.support.v4.app.NavUtils;
-import android.support.v7.app.ActionBarActivity;
 import android.support.v7.app.AlertDialog;
+import android.support.v7.app.AppCompatActivity;
 import android.text.TextUtils;
 import android.util.Log;
 import android.view.LayoutInflater;
@@ -29,7 +29,6 @@ import com.bumptech.glide.Glide;
 
 import org.apache.commons.lang3.StringUtils;
 import org.jsoup.Jsoup;
-import org.jsoup.examples.HtmlToPlainText;
 import org.jsoup.nodes.Document;
 
 import java.io.File;
@@ -63,6 +62,7 @@ import de.danoeh.antennapod.core.util.FileNameGenerator;
 import de.danoeh.antennapod.core.util.StorageUtils;
 import de.danoeh.antennapod.core.util.URLChecker;
 import de.danoeh.antennapod.core.util.syndication.FeedDiscoverer;
+import de.danoeh.antennapod.core.util.syndication.HtmlToPlainText;
 import de.danoeh.antennapod.dialog.AuthenticationDialog;
 import de.greenrobot.event.EventBus;
 import rx.Observable;
@@ -79,19 +79,14 @@ import rx.schedulers.Schedulers;
  * If the feed cannot be downloaded or parsed, an error dialog will be displayed
  * and the activity will finish as soon as the error dialog is closed.
  */
-public class OnlineFeedViewActivity extends ActionBarActivity {
-
-    private static final String TAG = "OnlineFeedViewActivity";
+public class OnlineFeedViewActivity extends AppCompatActivity {
 
     public static final String ARG_FEEDURL = "arg.feedurl";
-
     // Optional argument: specify a title for the actionbar.
     public static final String ARG_TITLE = "title";
-
-    private static final int EVENTS = EventDistributor.FEED_LIST_UPDATE;
-
     public static final int RESULT_ERROR = 2;
-
+    private static final String TAG = "OnlineFeedViewActivity";
+    private static final int EVENTS = EventDistributor.FEED_LIST_UPDATE;
     private volatile List<Feed> feeds;
     private Feed feed;
     private String selectedDownloadUrl;
@@ -106,22 +101,19 @@ public class OnlineFeedViewActivity extends ActionBarActivity {
     private Subscription download;
     private Subscription parser;
     private Subscription updater;
-
-    public void onEventMainThread(DownloadEvent event) {
-        Log.d(TAG, "onEventMainThread() called with: " + "event = [" + event + "]");
-        setSubscribeButtonState(feed);
-    }
-
     private EventDistributor.EventListener listener = new EventDistributor.EventListener() {
         @Override
         public void update(EventDistributor eventDistributor, Integer arg) {
             if ((arg & EventDistributor.FEED_LIST_UPDATE) != 0) {
-                updater = Observable.fromCallable(() -> DBReader.getFeedList())
+                updater = Observable.fromCallable(DBReader::getFeedList)
                         .subscribeOn(Schedulers.newThread())
                         .observeOn(AndroidSchedulers.mainThread())
-                        .subscribe(feeds -> {
+                        .subscribe(
+                                feeds -> {
                                     OnlineFeedViewActivity.this.feeds = feeds;
                                     setSubscribeButtonState(feed);
+                                }, error -> {
+                                    Log.e(TAG, Log.getStackTraceString(error));
                                 }
                         );
             } else if ((arg & EVENTS) != 0) {
@@ -129,6 +121,11 @@ public class OnlineFeedViewActivity extends ActionBarActivity {
             }
         }
     };
+
+    public void onEventMainThread(DownloadEvent event) {
+        Log.d(TAG, "onEventMainThread() called with: " + "event = [" + event + "]");
+        setSubscribeButtonState(feed);
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -281,30 +278,33 @@ public class OnlineFeedViewActivity extends ActionBarActivity {
                 })
                 .subscribeOn(Schedulers.newThread())
                 .observeOn(AndroidSchedulers.mainThread())
-                .subscribe(status -> {
-                    if (status != null) {
-                        if (!status.isCancelled()) {
-                            if (status.isSuccessful()) {
-                                parseFeed();
-                            } else if (status.getReason() == DownloadError.ERROR_UNAUTHORIZED) {
-                                if (!isFinishing() && !isPaused) {
-                                    dialog = new FeedViewAuthenticationDialog(OnlineFeedViewActivity.this,
-                                            R.string.authentication_notification_title, downloader.getDownloadRequest().getSource());
-                                    dialog.show();
-                                }
-                            } else {
-                                String errorMsg = status.getReason().getErrorString(OnlineFeedViewActivity.this);
-                                if (errorMsg != null && status.getReasonDetailed() != null) {
-                                    errorMsg += " (" + status.getReasonDetailed() + ")";
-                                }
-                                showErrorDialog(errorMsg);
-                            }
-                        }
-                    } else {
-                        Log.wtf(TAG, "DownloadStatus returned by Downloader was null");
-                        finish();
-                    }
-                });
+                .subscribe(this::checkDownloadResult,
+                        error -> Log.e(TAG, Log.getStackTraceString(error)));
+    }
+
+    private void checkDownloadResult(DownloadStatus status) {
+        if (status == null) {
+            Log.wtf(TAG, "DownloadStatus returned by Downloader was null");
+            finish();
+        }
+        if (status.isCancelled()) {
+            return;
+        }
+        if (status.isSuccessful()) {
+            parseFeed();
+        } else if (status.getReason() == DownloadError.ERROR_UNAUTHORIZED) {
+            if (!isFinishing() && !isPaused) {
+                dialog = new FeedViewAuthenticationDialog(OnlineFeedViewActivity.this,
+                        R.string.authentication_notification_title, downloader.getDownloadRequest().getSource());
+                dialog.show();
+            }
+        } else {
+            String errorMsg = status.getReason().getErrorString(OnlineFeedViewActivity.this);
+            if (errorMsg != null && status.getReasonDetailed() != null) {
+                errorMsg += " (" + status.getReasonDetailed() + ")";
+            }
+            showErrorDialog(errorMsg);
+        }
     }
 
     private void parseFeed() {
@@ -328,6 +328,7 @@ public class OnlineFeedViewActivity extends ActionBarActivity {
                                 subscriber.onError(e);
                             }
                         } catch (Exception e) {
+                            Log.e(TAG, Log.getStackTraceString(e));
                             subscriber.onError(e);
                         } finally {
                             boolean rc = new File(feed.getFile_url()).delete();
@@ -353,14 +354,19 @@ public class OnlineFeedViewActivity extends ActionBarActivity {
      * This method is executed on a background thread
      */
     private void beforeShowFeedInformation(Feed feed) {
-        // remove HTML tags from descriptions
+        final HtmlToPlainText formatter = new HtmlToPlainText();
+        if(Feed.TYPE_ATOM1.equals(feed.getType()) && feed.getDescription() != null) {
+            // remove HTML tags from descriptions
+            Log.d(TAG, "Removing HTML from feed description");
+            Document feedDescription = Jsoup.parse(feed.getDescription());
+            feed.setDescription(StringUtils.trim(formatter.getPlainText(feedDescription)));
+        }
         Log.d(TAG, "Removing HTML from shownotes");
         if (feed.getItems() != null) {
-            HtmlToPlainText formatter = new HtmlToPlainText();
             for (FeedItem item : feed.getItems()) {
                 if (item.getDescription() != null) {
-                    Document description = Jsoup.parse(item.getDescription());
-                    item.setDescription(StringUtils.trim(formatter.getPlainText(description)));
+                    Document itemDescription = Jsoup.parse(item.getDescription());
+                    item.setDescription(StringUtils.trim(formatter.getPlainText(itemDescription)));
                 }
             }
         }
@@ -408,18 +414,25 @@ public class OnlineFeedViewActivity extends ActionBarActivity {
         description.setText(feed.getDescription());
 
         subscribeButton.setOnClickListener(v -> {
-            try {
+            if(feed != null && feedInFeedlist(feed)) {
+                Intent intent = new Intent(OnlineFeedViewActivity.this, MainActivity.class);
+                // feed.getId() is always 0, we have to retrieve the id from the feed list from
+                // the database
+                intent.putExtra(MainActivity.EXTRA_FEED_ID, getFeedId(feed));
+                intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
+                startActivity(intent);
+            } else {
                 Feed f = new Feed(selectedDownloadUrl, null, feed.getTitle());
                 f.setPreferences(feed.getPreferences());
                 this.feed = f;
-
-                DownloadRequester.getInstance().downloadFeed(this, f);
-            } catch (DownloadRequestException e) {
-                e.printStackTrace();
-                DownloadRequestErrorDialogCreator.newRequestErrorDialog(OnlineFeedViewActivity.this,
-                        e.getMessage());
+                try {
+                    DownloadRequester.getInstance().downloadFeed(this, f);
+                } catch (DownloadRequestException e) {
+                    Log.e(TAG, Log.getStackTraceString(e));
+                    DownloadRequestErrorDialogCreator.newRequestErrorDialog(this, e.getMessage());
+                }
+                setSubscribeButtonState(feed);
             }
-            setSubscribeButtonState(feed);
         });
 
         if (alternateFeedUrls.isEmpty()) {
@@ -462,8 +475,8 @@ public class OnlineFeedViewActivity extends ActionBarActivity {
                 subscribeButton.setEnabled(false);
                 subscribeButton.setText(R.string.downloading_label);
             } else if (feedInFeedlist(feed)) {
-                subscribeButton.setEnabled(false);
-                subscribeButton.setText(R.string.subscribed_label);
+                subscribeButton.setEnabled(true);
+                subscribeButton.setText(R.string.open_podcast);
             } else {
                 subscribeButton.setEnabled(true);
                 subscribeButton.setText(R.string.subscribe_label);
@@ -483,6 +496,18 @@ public class OnlineFeedViewActivity extends ActionBarActivity {
         return false;
     }
 
+    private long getFeedId(Feed feed) {
+        if (feeds == null || feed == null) {
+            return 0;
+        }
+        for (Feed f : feeds) {
+            if (f.getIdentifyingValue().equals(feed.getIdentifyingValue())) {
+                return f.getId();
+            }
+        }
+        return 0;
+    }
+
     private void showErrorDialog(String errorMsg) {
         assert(Looper.myLooper() == Looper.getMainLooper()); // run on UI thread
         if (!isFinishing() && !isPaused) {
@@ -494,9 +519,7 @@ public class OnlineFeedViewActivity extends ActionBarActivity {
                 builder.setMessage(R.string.error_msg_prefix);
             }
             builder.setNeutralButton(android.R.string.ok,
-                    (dialog, which) -> {
-                        dialog.cancel();
-                    }
+                    (dialog, which) -> dialog.cancel()
             );
             builder.setOnCancelListener(dialog -> {
                 setResult(RESULT_ERROR);
@@ -565,7 +588,7 @@ public class OnlineFeedViewActivity extends ActionBarActivity {
 
         private String feedUrl;
 
-        public FeedViewAuthenticationDialog(Context context, int titleRes, String feedUrl) {
+        FeedViewAuthenticationDialog(Context context, int titleRes, String feedUrl) {
             super(context, titleRes, true, false, null, null);
             this.feedUrl = feedUrl;
         }

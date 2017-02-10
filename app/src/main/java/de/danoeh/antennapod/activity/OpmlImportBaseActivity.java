@@ -3,9 +3,11 @@ package de.danoeh.antennapod.activity;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Environment;
+import android.support.annotation.Nullable;
 import android.support.v4.app.ActivityCompat;
-import android.support.v7.app.ActionBarActivity;
+import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
 
 import com.afollestad.materialdialogs.MaterialDialog;
@@ -19,19 +21,18 @@ import java.util.ArrayList;
 import de.danoeh.antennapod.R;
 import de.danoeh.antennapod.asynctask.OpmlFeedQueuer;
 import de.danoeh.antennapod.asynctask.OpmlImportWorker;
-import de.danoeh.antennapod.core.opml.OpmlElement;
+import de.danoeh.antennapod.core.export.opml.OpmlElement;
 import de.danoeh.antennapod.core.util.LangUtils;
 
 /**
  * Base activity for Opml Import - e.g. with code what to do afterwards
  * */
-public class OpmlImportBaseActivity extends ActionBarActivity {
+public class OpmlImportBaseActivity extends AppCompatActivity {
 
     private static final String TAG = "OpmlImportBaseActivity";
-    private OpmlImportWorker importWorker;
-
 	private static final int PERMISSION_REQUEST_READ_EXTERNAL_STORAGE = 5;
-	private Uri uri;
+    private OpmlImportWorker importWorker;
+	@Nullable private Uri uri;
 
 	/**
 	 * Handles the choices made by the user in the OpmlFeedChooserActivity and
@@ -67,9 +68,17 @@ public class OpmlImportBaseActivity extends ActionBarActivity {
 		}
 	}
 
-	protected void importUri(Uri uri) {
+	protected void importUri(@Nullable Uri uri) {
+        if(uri == null) {
+            new MaterialDialog.Builder(this)
+                    .content(R.string.opml_import_error_no_file)
+                    .positiveText(android.R.string.ok)
+                    .show();
+            return;
+        }
 		this.uri = uri;
-        if(uri.toString().contains(Environment.getExternalStorageDirectory().toString())) {
+        if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
+				uri.toString().contains(Environment.getExternalStorageDirectory().toString())) {
             int permission = ActivityCompat.checkSelfPermission(this, android.Manifest.permission.READ_EXTERNAL_STORAGE);
             if (permission != PackageManager.PERMISSION_GRANTED) {
                 requestPermission();
@@ -127,8 +136,9 @@ public class OpmlImportBaseActivity extends ActionBarActivity {
             importWorker.executeAsync();
         } catch (Exception e) {
             Log.d(TAG, Log.getStackTraceString(e));
+			String message = getString(R.string.opml_reader_error);
             new MaterialDialog.Builder(this)
-                    .content("Cannot open OPML file: " + e.getMessage())
+                    .content(message + " " + e.getMessage())
                     .positiveText(android.R.string.ok)
                     .show();
         }

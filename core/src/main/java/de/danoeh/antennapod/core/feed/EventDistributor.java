@@ -34,7 +34,7 @@ public class EventDistributor extends Observable {
 
 	private EventDistributor() {
 		this.handler = new Handler();
-		events = new ConcurrentLinkedQueue<Integer>();
+		events = new ConcurrentLinkedQueue<>();
 	}
 
 	public static synchronized EventDistributor getInstance() {
@@ -54,13 +54,7 @@ public class EventDistributor extends Observable {
 
 	public void addEvent(Integer i) {
 		events.offer(i);
-		handler.post(new Runnable() {
-
-			@Override
-			public void run() {
-				processEventQueue();
-			}
-		});
+		handler.post(EventDistributor.this::processEventQueue);
 	}
 
 	private void processEventQueue() {
@@ -102,7 +96,7 @@ public class EventDistributor extends Observable {
 
     public void sendPlayerStatusUpdateBroadcast() { addEvent(PLAYER_STATUS_UPDATE); }
 
-	public static abstract class EventListener implements Observer {
+	public abstract static class EventListener implements Observer {
 
 		@Override
 		public void update(Observable observable, Object data) {

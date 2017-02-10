@@ -1,7 +1,7 @@
 package de.danoeh.antennapod.core.feed;
 
 import android.database.Cursor;
-import android.net.Uri;
+import android.support.annotation.Nullable;
 
 import org.apache.commons.lang3.builder.ToStringBuilder;
 import org.apache.commons.lang3.builder.ToStringStyle;
@@ -54,9 +54,9 @@ public class FeedItem extends FeedComponent implements ShownotesProvider, Flattr
     private long feedId;
 
     private int state;
-    public final static int NEW = -1;
-    public final static int UNPLAYED = 0;
-    public final static int PLAYED = 1;
+    public static final int NEW = -1;
+    public static final int UNPLAYED = 0;
+    public static final int PLAYED = 1;
 
     private String paymentLink;
     private FlattrStatus flattrStatus;
@@ -171,9 +171,8 @@ public class FeedItem extends FeedComponent implements ShownotesProvider, Flattr
         String itemIdentifier = cursor.getString(indexItemIdentifier);
         long autoDownload = cursor.getLong(indexAutoDownload);
 
-        FeedItem item = new FeedItem(id, title, link, pubDate, paymentLink, feedId, flattrStatus,
+        return new FeedItem(id, title, link, pubDate, paymentLink, feedId, flattrStatus,
                 hasChapters, null, state, itemIdentifier, autoDownload);
-        return item;
     }
 
     public void updateFromOther(FeedItem other) {
@@ -196,6 +195,8 @@ public class FeedItem extends FeedComponent implements ShownotesProvider, Flattr
         if (other.media != null) {
             if (media == null) {
                 setMedia(other.media);
+                // reset to new if feed item did link to a file before
+                setNew();
             } else if (media.compareWithOther(other.media)) {
                 media.updateFromOther(other.media);
             }
@@ -269,6 +270,7 @@ public class FeedItem extends FeedComponent implements ShownotesProvider, Flattr
         }
     }
 
+    @Nullable
     public FeedMedia getMedia() {
         return media;
     }
@@ -359,35 +361,27 @@ public class FeedItem extends FeedComponent implements ShownotesProvider, Flattr
     }
 
     private boolean isPlaying() {
-        if (media != null) {
-            return media.isPlaying();
-        }
-        return false;
+        return media != null && media.isPlaying();
     }
 
     @Override
     public Callable<String> loadShownotes() {
-        return new Callable<String>() {
-            @Override
-            public String call() throws Exception {
-
-                if (contentEncoded == null || description == null) {
-                    DBReader.loadExtraInformationOfFeedItem(FeedItem.this);
-
-                }
-                return (contentEncoded != null) ? contentEncoded : description;
+        return () -> {
+            if (contentEncoded == null || description == null) {
+                DBReader.loadExtraInformationOfFeedItem(FeedItem.this);
             }
+            return (contentEncoded != null) ? contentEncoded : description;
         };
     }
 
     @Override
-    public Uri getImageUri() {
+    public String getImageLocation() {
         if(media != null && media.hasEmbeddedPicture()) {
-            return media.getImageUri();
+            return media.getImageLocation();
         } else if (image != null) {
-           return image.getImageUri();
+           return image.getImageLocation();
         } else if (feed != null) {
-            return feed.getImageUri();
+            return feed.getImageLocation();
         } else {
             return null;
         }

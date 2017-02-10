@@ -1,6 +1,5 @@
 package de.danoeh.antennapod.fragment;
 
-import android.app.Activity;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.SharedPreferences;
@@ -24,7 +23,6 @@ import android.widget.Toast;
 import com.yqritc.recyclerviewflexibledivider.HorizontalDividerItemDecoration;
 
 import java.util.List;
-import java.util.concurrent.atomic.AtomicReference;
 
 import de.danoeh.antennapod.R;
 import de.danoeh.antennapod.activity.MainActivity;
@@ -72,16 +70,14 @@ public class AllEpisodesFragment extends Fragment {
     private static final String PREF_SCROLL_OFFSET = "scroll_offset";
 
     protected RecyclerView recyclerView;
-    private AllEpisodesRecycleAdapter listAdapter;
+    protected AllEpisodesRecycleAdapter listAdapter;
     private ProgressBar progLoading;
 
-    private List<FeedItem> episodes;
+    protected List<FeedItem> episodes;
     private List<Downloader> downloaderList;
 
     private boolean itemsLoaded = false;
     private boolean viewsCreated = false;
-
-    private AtomicReference<MainActivity> activity = new AtomicReference<MainActivity>();
 
     private boolean isUpdatingFeeds;
 
@@ -101,7 +97,6 @@ public class AllEpisodesFragment extends Fragment {
     public void onStart() {
         super.onStart();
         EventDistributor.getInstance().register(contentUpdate);
-        this.activity.set((MainActivity) getActivity());
         if (viewsCreated && itemsLoaded) {
             onFragmentLoaded();
         }
@@ -130,12 +125,6 @@ public class AllEpisodesFragment extends Fragment {
         if(subscription != null) {
             subscription.unsubscribe();
         }
-    }
-
-    @Override
-    public void onAttach(Activity activity) {
-        super.onAttach(activity);
-        this.activity.set((MainActivity) getActivity());
     }
 
     @Override
@@ -176,18 +165,13 @@ public class AllEpisodesFragment extends Fragment {
     }
 
     protected void resetViewState() {
-        listAdapter = null;
-        activity.set(null);
         viewsCreated = false;
+        listAdapter = null;
     }
 
 
-    private final MenuItemUtils.UpdateRefreshMenuItemChecker updateRefreshMenuItemChecker = new MenuItemUtils.UpdateRefreshMenuItemChecker() {
-        @Override
-        public boolean isRefreshing() {
-            return DownloadService.isRunning && DownloadRequester.getInstance().isDownloadingFeeds();
-        }
-    };
+    private final MenuItemUtils.UpdateRefreshMenuItemChecker updateRefreshMenuItemChecker =
+            () -> DownloadService.isRunning && DownloadRequester.getInstance().isDownloadingFeeds();
 
     @Override
     public void onCreateOptionsMenu(Menu menu, MenuInflater inflater) {
@@ -196,7 +180,7 @@ public class AllEpisodesFragment extends Fragment {
         }
         super.onCreateOptionsMenu(menu, inflater);
         if (itemsLoaded) {
-            inflater.inflate(R.menu.new_episodes, menu);
+            inflater.inflate(R.menu.episodes, menu);
 
             MenuItem searchItem = menu.findItem(R.id.action_search);
             final SearchView sv = (SearchView) MenuItemCompat.getActionView(searchItem);
@@ -222,11 +206,13 @@ public class AllEpisodesFragment extends Fragment {
     @Override
     public void onPrepareOptionsMenu(Menu menu) {
         super.onPrepareOptionsMenu(menu);
-        if (itemsLoaded) {
-            MenuItem menuItem = menu.findItem(R.id.mark_all_read_item);
-            if (menuItem != null) {
-                menuItem.setVisible(episodes != null && !episodes.isEmpty());
-            }
+        MenuItem markAllRead = menu.findItem(R.id.mark_all_read_item);
+        if (markAllRead != null) {
+            markAllRead.setVisible(!showOnlyNewEpisodes() && episodes != null && !episodes.isEmpty());
+        }
+        MenuItem markAllSeen = menu.findItem(R.id.mark_all_seen_item);
+        if(markAllSeen != null) {
+            markAllSeen.setVisible(showOnlyNewEpisodes() && episodes != null && !episodes.isEmpty());
         }
     }
 
@@ -241,19 +227,32 @@ public class AllEpisodesFragment extends Fragment {
                     }
                     return true;
                 case R.id.mark_all_read_item:
-                    ConfirmationDialog conDialog = new ConfirmationDialog(getActivity(),
+                    ConfirmationDialog markAllReadConfirmationDialog = new ConfirmationDialog(getActivity(),
                             R.string.mark_all_read_label,
                             R.string.mark_all_read_confirmation_msg) {
 
                         @Override
-                        public void onConfirmButtonPressed(
-                                DialogInterface dialog) {
+                        public void onConfirmButtonPressed(DialogInterface dialog) {
                             dialog.dismiss();
                             DBWriter.markAllItemsRead();
                             Toast.makeText(getActivity(), R.string.mark_all_read_msg, Toast.LENGTH_SHORT).show();
                         }
                     };
-                    conDialog.createNewDialog().show();
+                    markAllReadConfirmationDialog.createNewDialog().show();
+                    return true;
+                case R.id.mark_all_seen_item:
+                    ConfirmationDialog markAllSeenConfirmationDialog = new ConfirmationDialog(getActivity(),
+                            R.string.mark_all_seen_label,
+                            R.string.mark_all_seen_confirmation_msg) {
+
+                        @Override
+                        public void onConfirmButtonPressed(DialogInterface dialog) {
+                            dialog.dismiss();
+                            DBWriter.markNewItemsSeen();
+                            Toast.makeText(getActivity(), R.string.mark_all_seen_msg, Toast.LENGTH_SHORT).show();
+                        }
+                    };
+                    markAllSeenConfirmationDialog.createNewDialog().show();
                     return true;
                 default:
                     return false;
@@ -325,7 +324,7 @@ public class AllEpisodesFragment extends Fragment {
 
         viewsCreated = true;
 
-        if (itemsLoaded && activity.get() != null) {
+        if (itemsLoaded) {
             onFragmentLoaded();
         }
 
@@ -334,9 +333,10 @@ public class AllEpisodesFragment extends Fragment {
 
     private void onFragmentLoaded() {
         if (listAdapter == null) {
-            MainActivity mainActivity = activity.get();
+            MainActivity mainActivity = (MainActivity) getActivity();
             listAdapter = new AllEpisodesRecycleAdapter(mainActivity, itemAccess,
                     new DefaultActionButtonCallback(mainActivity), showOnlyNewEpisodes());
+            listAdapter.setHasStableIds(true);
             recyclerView.setAdapter(listAdapter);
         }
         listAdapter.notifyDataSetChanged();
@@ -364,6 +364,18 @@ public class AllEpisodesFragment extends Fragment {
         }
 
         @Override
+        public LongList getItemsIds() {
+            if(episodes == null) {
+                return new LongList(0);
+            }
+            LongList ids = new LongList(episodes.size());
+            for(FeedItem episode : episodes) {
+                ids.add(episode.getId());
+            }
+            return ids;
+        }
+
+        @Override
         public int getItemDownloadProgressPercent(FeedItem item) {
             if (downloaderList != null) {
                 for (Downloader downloader : downloaderList) {
@@ -378,10 +390,7 @@ public class AllEpisodesFragment extends Fragment {
 
         @Override
         public boolean isInQueue(FeedItem item) {
-            if (item != null) {
-                return item.isTagged(FeedItem.TAG_QUEUE);
-            }
-            return false;
+            return item != null && item.isTagged(FeedItem.TAG_QUEUE);
         }
 
         @Override
@@ -398,19 +407,6 @@ public class AllEpisodesFragment extends Fragment {
             return queueIds;
         }
 
-        @Override
-        public LongList getFavoritesIds() {
-            LongList favoritesIds = new LongList();
-            if(episodes == null) {
-                return favoritesIds;
-            }
-            for(FeedItem item : episodes) {
-                if(item.isTagged(FeedItem.TAG_FAVORITE)) {
-                    favoritesIds.add(item.getId());
-                }
-            }
-            return favoritesIds;
-        }
     };
 
     public void onEventMainThread(FeedItemEvent event) {
@@ -470,7 +466,7 @@ public class AllEpisodesFragment extends Fragment {
             recyclerView.setVisibility(View.GONE);
             progLoading.setVisibility(View.VISIBLE);
         }
-        subscription = Observable.fromCallable(() -> loadData())
+        subscription = Observable.fromCallable(this::loadData)
                 .subscribeOn(Schedulers.newThread())
                 .observeOn(AndroidSchedulers.mainThread())
                 .subscribe(data -> {
@@ -479,13 +475,11 @@ public class AllEpisodesFragment extends Fragment {
                     if (data != null) {
                         episodes = data;
                         itemsLoaded = true;
-                        if (viewsCreated && activity.get() != null) {
+                        if (viewsCreated) {
                             onFragmentLoaded();
                         }
                     }
-                }, error -> {
-                    Log.e(TAG, Log.getStackTraceString(error));
-                });
+                }, error -> Log.e(TAG, Log.getStackTraceString(error)));
     }
 
     protected List<FeedItem> loadData() {

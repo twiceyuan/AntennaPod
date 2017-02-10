@@ -37,6 +37,8 @@ public class GpodnetPreferences {
     public static final String PREF_SYNC_ADDED = "de.danoeh.antennapod.preferences.gpoddernet.sync_added";
     public static final String PREF_SYNC_REMOVED = "de.danoeh.antennapod.preferences.gpoddernet.sync_removed";
     public static final String PREF_SYNC_EPISODE_ACTIONS = "de.danoeh.antennapod.preferences.gpoddernet.sync_queued_episode_actions";
+    public static final String PREF_LAST_SYNC_ATTEMPT_TIMESTAMP = "de.danoeh.antennapod.preferences.gpoddernet.last_sync_attempt_timestamp";
+    public static final String PREF_LAST_SYNC_ATTEMPT_RESULT = "de.danoeh.antennapod.preferences.gpoddernet.last_sync_attempt_result";
 
     private static String username;
     private static String password;
@@ -56,10 +58,24 @@ public class GpodnetPreferences {
 
     private static long lastEpisodeActionsSyncTimeStamp;
 
+    private static long lastSyncAttemptTimestamp;
+
+    private static boolean lastSyncAttemptResult;
+
     private static boolean preferencesLoaded = false;
 
     private static SharedPreferences getPreferences() {
         return ClientConfig.applicationCallbacks.getApplicationInstance().getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
+    }
+
+    public static void registerOnSharedPreferenceChangeListener(
+            SharedPreferences.OnSharedPreferenceChangeListener listener) {
+        getPreferences().registerOnSharedPreferenceChangeListener(listener);
+    }
+
+    public static void unregisterOnSharedPreferenceChangeListener(
+            SharedPreferences.OnSharedPreferenceChangeListener listener) {
+        getPreferences().unregisterOnSharedPreferenceChangeListener(listener);
     }
 
     private static synchronized void ensurePreferencesLoaded() {
@@ -70,6 +86,8 @@ public class GpodnetPreferences {
             deviceID = prefs.getString(PREF_GPODNET_DEVICEID, null);
             lastSubscriptionSyncTimestamp = prefs.getLong(PREF_LAST_SUBSCRIPTION_SYNC_TIMESTAMP, 0);
             lastEpisodeActionsSyncTimeStamp = prefs.getLong(PREF_LAST_EPISODE_ACTIONS_SYNC_TIMESTAMP, 0);
+            lastSyncAttemptTimestamp = prefs.getLong(PREF_LAST_SYNC_ATTEMPT_TIMESTAMP, 0);
+            lastSyncAttemptResult = prefs.getBoolean(PREF_LAST_SYNC_ATTEMPT_RESULT, false);
             addedFeeds = readListFromString(prefs.getString(PREF_SYNC_ADDED, ""));
             removedFeeds = readListFromString(prefs.getString(PREF_SYNC_REMOVED, ""));
             queuedEpisodeActions = readEpisodeActionsFromString(prefs.getString(PREF_SYNC_EPISODE_ACTIONS, ""));
@@ -82,19 +100,25 @@ public class GpodnetPreferences {
     private static void writePreference(String key, String value) {
         SharedPreferences.Editor editor = getPreferences().edit();
         editor.putString(key, value);
-        editor.commit();
+        editor.apply();
     }
 
     private static void writePreference(String key, long value) {
         SharedPreferences.Editor editor = getPreferences().edit();
         editor.putLong(key, value);
-        editor.commit();
+        editor.apply();
     }
 
     private static void writePreference(String key, Collection<String> value) {
         SharedPreferences.Editor editor = getPreferences().edit();
         editor.putString(key, writeListToString(value));
-        editor.commit();
+        editor.apply();
+    }
+
+    private static void writePreference(String key, boolean value) {
+        SharedPreferences.Editor editor = getPreferences().edit();
+        editor.putBoolean(key, value);
+        editor.apply();
     }
 
     public static String getUsername() {
@@ -147,6 +171,23 @@ public class GpodnetPreferences {
         writePreference(PREF_LAST_EPISODE_ACTIONS_SYNC_TIMESTAMP, timestamp);
     }
 
+    public static long getLastSyncAttemptTimestamp() {
+        ensurePreferencesLoaded();
+        return lastSyncAttemptTimestamp;
+    }
+
+    public static boolean getLastSyncAttemptResult() {
+        ensurePreferencesLoaded();
+        return lastSyncAttemptResult;
+    }
+
+    public static void setLastSyncAttempt(boolean result, long timestamp) {
+        GpodnetPreferences.lastSyncAttemptResult = result;
+        GpodnetPreferences.lastSyncAttemptTimestamp = timestamp;
+        writePreference(PREF_LAST_SYNC_ATTEMPT_RESULT, result);
+        writePreference(PREF_LAST_SYNC_ATTEMPT_TIMESTAMP, timestamp);
+    }
+
     public static String getHostname() {
         ensurePreferencesLoaded();
         return hostname;
@@ -189,7 +230,7 @@ public class GpodnetPreferences {
 
     public static Set<String> getAddedFeedsCopy() {
         ensurePreferencesLoaded();
-        Set<String> copy = new HashSet<String>();
+        Set<String> copy = new HashSet<>();
         feedListLock.lock();
         copy.addAll(addedFeeds);
         feedListLock.unlock();
@@ -206,7 +247,7 @@ public class GpodnetPreferences {
 
     public static Set<String> getRemovedFeedsCopy() {
         ensurePreferencesLoaded();
-        Set<String> copy = new HashSet<String>();
+        Set<String> copy = new HashSet<>();
         feedListLock.lock();
         copy.addAll(removedFeeds);
         feedListLock.unlock();
@@ -232,7 +273,7 @@ public class GpodnetPreferences {
 
     public static List<GpodnetEpisodeAction> getQueuedEpisodeActions() {
         ensurePreferencesLoaded();
-        List<GpodnetEpisodeAction> copy = new ArrayList();
+        List<GpodnetEpisodeAction> copy = new ArrayList<>();
         feedListLock.lock();
         copy.addAll(queuedEpisodeActions);
         feedListLock.unlock();
@@ -269,10 +310,12 @@ public class GpodnetPreferences {
         writePreference(PREF_SYNC_EPISODE_ACTIONS, writeEpisodeActionsToString(queuedEpisodeActions));
         feedListLock.unlock();
         setLastSubscriptionSyncTimestamp(0);
+        setLastSyncAttempt(false, 0);
+        UserPreferences.setGpodnetNotificationsEnabled();
     }
 
     private static Set<String> readListFromString(String s) {
-        Set<String> result = new HashSet<String>();
+        Set<String> result = new HashSet<>();
         for (String item : s.split(" ")) {
             result.add(item);
         }
@@ -290,7 +333,7 @@ public class GpodnetPreferences {
 
     private static List<GpodnetEpisodeAction> readEpisodeActionsFromString(String s) {
         String[] lines = s.split("\n");
-        List<GpodnetEpisodeAction> result = new ArrayList<GpodnetEpisodeAction>(lines.length);
+        List<GpodnetEpisodeAction> result = new ArrayList<>(lines.length);
         for(String line : lines) {
             if(TextUtils.isEmpty(line)) {
                 GpodnetEpisodeAction action = GpodnetEpisodeAction.readFromString(line);

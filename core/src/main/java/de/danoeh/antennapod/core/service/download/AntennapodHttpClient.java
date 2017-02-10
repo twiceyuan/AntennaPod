@@ -2,28 +2,39 @@ package de.danoeh.antennapod.core.service.download;
 
 import android.os.Build;
 import android.support.annotation.NonNull;
+import android.text.TextUtils;
 import android.util.Log;
-
-import com.squareup.okhttp.OkHttpClient;
-import com.squareup.okhttp.Request;
-import com.squareup.okhttp.Response;
-import com.squareup.okhttp.internal.http.StatusLine;
 
 import java.io.IOException;
 import java.net.CookieManager;
 import java.net.CookiePolicy;
 import java.net.HttpURLConnection;
 import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.net.Proxy;
 import java.net.Socket;
-import java.net.URL;
+import java.net.SocketAddress;
 import java.security.GeneralSecurityException;
+import java.security.KeyStore;
+import java.util.Arrays;
 import java.util.concurrent.TimeUnit;
 
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.TrustManagerFactory;
+import javax.net.ssl.X509TrustManager;
 
+import de.danoeh.antennapod.core.preferences.UserPreferences;
 import de.danoeh.antennapod.core.storage.DBWriter;
+import okhttp3.Credentials;
+import okhttp3.HttpUrl;
+import okhttp3.JavaNetCookieJar;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.Response;
+import okhttp3.internal.http.StatusLine;
 
 /**
  * Provides access to a HttpClient singleton.
@@ -44,10 +55,13 @@ public class AntennapodHttpClient {
      */
     public static synchronized OkHttpClient getHttpClient() {
         if (httpClient == null) {
-
-            httpClient = newHttpClient();
+            httpClient = newBuilder().build();
         }
         return httpClient;
+    }
+
+    public static synchronized void reinit() {
+        httpClient = newBuilder().build();
     }
 
     /**
@@ -58,33 +72,33 @@ public class AntennapodHttpClient {
      * @return http client
      */
     @NonNull
-    public static OkHttpClient newHttpClient() {
+    public static OkHttpClient.Builder newBuilder() {
         Log.d(TAG, "Creating new instance of HTTP client");
 
         System.setProperty("http.maxConnections", String.valueOf(MAX_CONNECTIONS));
 
-        OkHttpClient client = new OkHttpClient();
+        OkHttpClient.Builder builder = new OkHttpClient.Builder();
 
         // detect 301 Moved permanently and 308 Permanent Redirect
-        client.networkInterceptors().add(chain -> {
+        builder.networkInterceptors().add(chain -> {
             Request request = chain.request();
             Response response = chain.proceed(request);
-            if(response.code() == HttpURLConnection.HTTP_MOVED_PERM ||
+            if (response.code() == HttpURLConnection.HTTP_MOVED_PERM ||
                     response.code() == StatusLine.HTTP_PERM_REDIRECT) {
                 String location = response.header("Location");
-                if(location.startsWith("/")) { // URL is not absolute, but relative
-                    URL url = request.url();
-                    location = url.getProtocol() + "://" + url.getHost() + location;
-                } else if(!location.toLowerCase().startsWith("http://") &&
+                if (location.startsWith("/")) { // URL is not absolute, but relative
+                    HttpUrl url = request.url();
+                    location = url.scheme() + "://" + url.host() + location;
+                } else if (!location.toLowerCase().startsWith("http://") &&
                         !location.toLowerCase().startsWith("https://")) {
                     // Reference is relative to current path
-                    URL url = request.url();
-                    String path = url.getPath();
+                    HttpUrl url = request.url();
+                    String path = url.encodedPath();
                     String newPath = path.substring(0, path.lastIndexOf("/") + 1) + location;
-                    location = url.getProtocol() + "://" + url.getHost() + newPath;
+                    location = url.scheme() + "://" + url.host() + newPath;
                 }
                 try {
-                    DBWriter.updateFeedDownloadURL(request.urlString(), location).get();
+                    DBWriter.updateFeedDownloadURL(request.url().toString(), location).get();
                 } catch (Exception e) {
                     Log.e(TAG, Log.getStackTraceString(e));
                 }
@@ -95,21 +109,36 @@ public class AntennapodHttpClient {
         // set cookie handler
         CookieManager cm = new CookieManager();
         cm.setCookiePolicy(CookiePolicy.ACCEPT_ORIGINAL_SERVER);
-        client.setCookieHandler(cm);
+        builder.cookieJar(new JavaNetCookieJar(cm));
 
         // set timeouts
-        client.setConnectTimeout(CONNECTION_TIMEOUT, TimeUnit.MILLISECONDS);
-        client.setReadTimeout(READ_TIMEOUT, TimeUnit.MILLISECONDS);
-        client.setWriteTimeout(READ_TIMEOUT, TimeUnit.MILLISECONDS);
+        builder.connectTimeout(CONNECTION_TIMEOUT, TimeUnit.MILLISECONDS);
+        builder.readTimeout(READ_TIMEOUT, TimeUnit.MILLISECONDS);
+        builder.writeTimeout(READ_TIMEOUT, TimeUnit.MILLISECONDS);
 
         // configure redirects
-        client.setFollowRedirects(true);
-        client.setFollowSslRedirects(true);
+        builder.followRedirects(true);
+        builder.followSslRedirects(true);
 
-        if(16 <= Build.VERSION.SDK_INT && Build.VERSION.SDK_INT < 21) {
-            client.setSslSocketFactory(new CustomSslSocketFactory());
+        ProxyConfig config = UserPreferences.getProxyConfig();
+        if (config.type != Proxy.Type.DIRECT) {
+            int port = config.port > 0 ? config.port : ProxyConfig.DEFAULT_PORT;
+            SocketAddress address = InetSocketAddress.createUnresolved(config.host, port);
+            Proxy proxy = new Proxy(config.type, address);
+            builder.proxy(proxy);
+            if (!TextUtils.isEmpty(config.username)) {
+                String credentials = Credentials.basic(config.username, config.password);
+                builder.interceptors().add(chain -> {
+                    Request request = chain.request().newBuilder()
+                            .header("Proxy-Authorization", credentials).build();
+                    return chain.proceed(request);
+                });
+            }
         }
-        return client;
+        if(16 <= Build.VERSION.SDK_INT && Build.VERSION.SDK_INT < 21) {
+            builder.sslSocketFactory(new CustomSslSocketFactory(), trustManager());
+        }
+        return builder;
     }
 
     /**
@@ -119,6 +148,23 @@ public class AntennapodHttpClient {
     public static synchronized void cleanup() {
         if (httpClient != null) {
             // does nothing at the moment
+        }
+    }
+
+    private static X509TrustManager trustManager() {
+        try {
+            TrustManagerFactory trustManagerFactory = TrustManagerFactory.getInstance(
+                    TrustManagerFactory.getDefaultAlgorithm());
+            trustManagerFactory.init((KeyStore) null);
+            TrustManager[] trustManagers = trustManagerFactory.getTrustManagers();
+            if (trustManagers.length != 1 || !(trustManagers[0] instanceof X509TrustManager)) {
+                throw new IllegalStateException("Unexpected default trust managers:"
+                        + Arrays.toString(trustManagers));
+            }
+            return (X509TrustManager) trustManagers[0];
+        } catch (Exception e) {
+            Log.e(TAG, Log.getStackTraceString(e));
+            return null;
         }
     }
 

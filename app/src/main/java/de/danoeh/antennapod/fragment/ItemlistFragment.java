@@ -47,9 +47,7 @@ import de.danoeh.antennapod.core.dialog.ConfirmationDialog;
 import de.danoeh.antennapod.core.dialog.DownloadRequestErrorDialogCreator;
 import de.danoeh.antennapod.core.event.DownloadEvent;
 import de.danoeh.antennapod.core.event.DownloaderUpdate;
-import de.danoeh.antennapod.core.event.FavoritesEvent;
 import de.danoeh.antennapod.core.event.FeedItemEvent;
-import de.danoeh.antennapod.core.event.QueueEvent;
 import de.danoeh.antennapod.core.feed.EventDistributor;
 import de.danoeh.antennapod.core.feed.Feed;
 import de.danoeh.antennapod.core.feed.FeedEvent;
@@ -69,6 +67,7 @@ import de.danoeh.antennapod.core.util.FeedItemUtil;
 import de.danoeh.antennapod.core.util.LongList;
 import de.danoeh.antennapod.core.util.gui.MoreContentListFooterUtil;
 import de.danoeh.antennapod.dialog.EpisodesApplyActionFragment;
+import de.danoeh.antennapod.dialog.RenameFeedDialog;
 import de.danoeh.antennapod.menuhandler.FeedItemMenuHandler;
 import de.danoeh.antennapod.menuhandler.FeedMenuHandler;
 import de.danoeh.antennapod.menuhandler.MenuItemUtils;
@@ -98,11 +97,10 @@ public class ItemlistFragment extends ListFragment {
 
     private long feedID;
     private Feed feed;
-    private LongList queuedItemsIds;
-    private LongList favoritedItemsId;
 
     private boolean itemsLoaded = false;
     private boolean viewsCreated = false;
+    private boolean headerCreated = false;
 
     private List<Downloader> downloaderList;
 
@@ -110,6 +108,7 @@ public class ItemlistFragment extends ListFragment {
 
     private boolean isUpdatingFeed;
     
+    private TextView txtvTitle;
     private IconTextView txtvFailure;
 
     private TextView txtvInformation;
@@ -185,11 +184,7 @@ public class ItemlistFragment extends ListFragment {
     private final MenuItemUtils.UpdateRefreshMenuItemChecker updateRefreshMenuItemChecker = new MenuItemUtils.UpdateRefreshMenuItemChecker() {
         @Override
         public boolean isRefreshing() {
-            if (feed != null && DownloadService.isRunning && DownloadRequester.getInstance().isDownloadingFile(feed)) {
-                return true;
-            } else {
-                return false;
-            }
+            return feed != null && DownloadService.isRunning && DownloadRequester.getInstance().isDownloadingFile(feed);
         }
     };
 
@@ -255,6 +250,9 @@ public class ItemlistFragment extends ListFragment {
                             EpisodesApplyActionFragment fragment = EpisodesApplyActionFragment
                                     .newInstance(feed.getItems());
                             ((MainActivity)getActivity()).loadChildFragment(fragment);
+                            return true;
+                        case R.id.rename_item:
+                            new RenameFeedDialog(getActivity(), feed).show();
                             return true;
                         case R.id.remove_item:
                             final FeedRemover remover = new FeedRemover(
@@ -325,8 +323,7 @@ public class ItemlistFragment extends ListFragment {
 
         contextMenu = menu;
         lastMenuInfo = (AdapterView.AdapterContextMenuInfo) menuInfo;
-        FeedItemMenuHandler.onPrepareMenu(contextMenuInterface, item, true, queuedItemsIds,
-                favoritedItemsId);
+        FeedItemMenuHandler.onPrepareMenu(contextMenuInterface, item, true, null);
     }
 
     @Override
@@ -378,22 +375,11 @@ public class ItemlistFragment extends ListFragment {
         if(adapter == null) {
             return;
         }
-        FeedItem selection = adapter.getItem(position - l.getHeaderViewsCount());
-        if (selection != null) {
-            MainActivity activity = (MainActivity) getActivity();
-            activity.loadChildFragment(ItemFragment.newInstance(selection.getId()));
-            activity.getSupportActionBar().setTitle(feed.getTitle());
-        }
-    }
-
-    public void onEvent(QueueEvent event) {
-        Log.d(TAG, "onEvent() called with: " + "event = [" + event + "]");
-        loadItems();
-    }
-
-    public void onEvent(FavoritesEvent event) {
-        Log.d(TAG, "onEvent() called with: " + "event = [" + event + "]");
-        loadItems();
+        position -= l.getHeaderViewsCount();
+        MainActivity activity = (MainActivity) getActivity();
+        long[] ids = FeedItemUtil.getIds(feed.getItems());
+        activity.loadChildFragment(ItemFragment.newInstance(ids, position));
+        activity.getSupportActionBar().setTitle(feed.getTitle());
     }
 
     public void onEvent(FeedEvent event) {
@@ -405,7 +391,6 @@ public class ItemlistFragment extends ListFragment {
 
     public void onEventMainThread(FeedItemEvent event) {
         Log.d(TAG, "onEventMainThread() called with: " + "event = [" + event + "]");
-        boolean queueChanged = false;
         if(feed == null || feed.getItems() == null || adapter == null) {
             return;
         }
@@ -436,6 +421,7 @@ public class ItemlistFragment extends ListFragment {
         public void update(EventDistributor eventDistributor, Integer arg) {
             if ((EVENTS & arg) != 0) {
                 Log.d(TAG, "Received contentUpdate Intent. arg " + arg);
+                refreshHeaderView();
                 loadItems();
                 updateProgressBarVisibility();
             }
@@ -481,8 +467,8 @@ public class ItemlistFragment extends ListFragment {
     }
 
     private void refreshHeaderView() {
-        if (getListView() == null || feed == null) {
-            Log.e(TAG, "Unable to setup listview: recyclerView = null or feed = null");
+        if (getListView() == null || feed == null || !headerCreated) {
+            Log.e(TAG, "Unable to refresh header view");
             return;
         }
         if(feed.hasLastUpdateFailed()) {
@@ -490,6 +476,7 @@ public class ItemlistFragment extends ListFragment {
         } else {
             txtvFailure.setVisibility(View.GONE);
         }
+        txtvTitle.setText(feed.getTitle());
         if(feed.getItemFilter() != null) {
             FeedItemFilter filter = feed.getItemFilter();
             if(filter.getValues().length > 0) {
@@ -519,7 +506,7 @@ public class ItemlistFragment extends ListFragment {
         View header = inflater.inflate(R.layout.feeditemlist_header, lv, false);
         lv.addHeaderView(header);
 
-        TextView txtvTitle = (TextView) header.findViewById(R.id.txtvTitle);
+        txtvTitle = (TextView) header.findViewById(R.id.txtvTitle);
         TextView txtvAuthor = (TextView) header.findViewById(R.id.txtvAuthor);
         ImageView imgvBackground = (ImageView) header.findViewById(R.id.imgvBackground);
         ImageView imgvCover = (ImageView) header.findViewById(R.id.imgvCover);
@@ -535,7 +522,7 @@ public class ItemlistFragment extends ListFragment {
         imgvBackground.setColorFilter(new LightingColorFilter(0xff828282, 0x000000));
 
         Glide.with(getActivity())
-                .load(feed.getImageUri())
+                .load(feed.getImageLocation())
                 .placeholder(R.color.image_readability_tint)
                 .error(R.color.image_readability_tint)
                 .diskCacheStrategy(ApGlideSettings.AP_DISK_CACHE_STRATEGY)
@@ -544,7 +531,7 @@ public class ItemlistFragment extends ListFragment {
                 .into(imgvBackground);
 
         Glide.with(getActivity())
-                .load(feed.getImageUri())
+                .load(feed.getImageLocation())
                 .placeholder(R.color.light_gray)
                 .error(R.color.light_gray)
                 .diskCacheStrategy(ApGlideSettings.AP_DISK_CACHE_STRATEGY)
@@ -560,6 +547,7 @@ public class ItemlistFragment extends ListFragment {
                 startActivity(startIntent);
             }
         });
+        headerCreated = true;
     }
 
 
@@ -600,13 +588,22 @@ public class ItemlistFragment extends ListFragment {
         }
 
         @Override
-        public int getCount() {
-            return (feed != null) ? feed.getNumOfItems() : 0;
+        public LongList getQueueIds() {
+            LongList queueIds = new LongList();
+            if(feed == null) {
+                return queueIds;
+            }
+            for(FeedItem item : feed.getItems()) {
+                if(item.isTagged(FeedItem.TAG_QUEUE)) {
+                    queueIds.add(item.getId());
+                }
+            }
+            return queueIds;
         }
 
         @Override
-        public boolean isInQueue(FeedItem item) {
-            return (queuedItemsIds != null) && queuedItemsIds.contains(item.getId());
+        public int getCount() {
+            return (feed != null) ? feed.getNumOfItems() : 0;
         }
 
         @Override
@@ -628,33 +625,28 @@ public class ItemlistFragment extends ListFragment {
         if(subscription != null) {
             subscription.unsubscribe();
         }
-        subscription = Observable.fromCallable(() -> loadData())
+        subscription = Observable.fromCallable(this::loadData)
                 .subscribeOn(Schedulers.newThread())
                 .observeOn(AndroidSchedulers.mainThread())
                 .subscribe(result -> {
                     if (result != null) {
-                        feed = (Feed) result[0];
-                        queuedItemsIds = (LongList) result[1];
-                        favoritedItemsId = (LongList) result[2];
+                        feed = result;
                         itemsLoaded = true;
                         if (viewsCreated) {
                             onFragmentLoaded();
                         }
                     }
-                }, error -> {
-                    Log.e(TAG, Log.getStackTraceString(error));
-                });
+                }, error -> Log.e(TAG, Log.getStackTraceString(error)));
     }
 
-    private Object[] loadData() {
+    private Feed loadData() {
         Feed feed = DBReader.getFeed(feedID);
+        DBReader.loadAdditionalFeedItemListData(feed.getItems());
         if(feed != null && feed.getItemFilter() != null) {
             FeedItemFilter filter = feed.getItemFilter();
             feed.setItems(filter.filter(feed.getItems()));
         }
-        LongList queuedItemsIds = DBReader.getQueueIDList();
-        LongList favoritedItemsId = DBReader.getFavoriteIDList();
-        return new Object[] { feed, queuedItemsIds, favoritedItemsId };
+        return feed;
     }
 
 }

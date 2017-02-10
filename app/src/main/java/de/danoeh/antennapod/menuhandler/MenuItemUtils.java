@@ -28,6 +28,7 @@ public class MenuItemUtils extends de.danoeh.antennapod.core.menuhandler.MenuIte
         }
     }
 
+    @SuppressWarnings("ResourceType")
     public static void refreshLockItem(Context context, Menu menu) {
         final MenuItem queueLock = menu.findItem(de.danoeh.antennapod.R.id.queue_lock);
         int[] lockIcons = new int[] { de.danoeh.antennapod.R.attr.ic_lock_open, de.danoeh.antennapod.R.attr.ic_lock_closed };
@@ -39,6 +40,7 @@ public class MenuItemUtils extends de.danoeh.antennapod.core.menuhandler.MenuIte
             queueLock.setTitle(de.danoeh.antennapod.R.string.lock_queue);
             queueLock.setIcon(ta.getDrawable(1));
         }
+        ta.recycle();
     }
 
 }

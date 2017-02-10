@@ -41,10 +41,12 @@ public class MainActivityTest extends ActivityInstrumentationTestCase2<MainActiv
     @Override
     protected void setUp() throws Exception {
         super.setUp();
-        uiTestUtils = new UITestUtils(getInstrumentation().getTargetContext());
+        Context context = getInstrumentation().getTargetContext();
+        uiTestUtils = new UITestUtils(context);
         uiTestUtils.setup();
 
         // create new database
+        PodDBAdapter.init(context);
         PodDBAdapter.deleteDatabase();
         PodDBAdapter adapter = PodDBAdapter.getInstance();
         adapter.open();
@@ -108,6 +110,12 @@ public class MainActivityTest extends ActivityInstrumentationTestCase2<MainActiv
         solo.waitForView(android.R.id.list);
         assertEquals(solo.getString(R.string.episodes_label), getActionbarTitle());
 
+        // Subscriptions
+        openNavDrawer();
+        solo.clickOnText(solo.getString(R.string.subscriptions_label));
+        solo.waitForView(R.id.subscriptions_grid);
+        assertEquals(solo.getString(R.string.subscriptions_label), getActionbarTitle());
+
         // downloads
         openNavDrawer();
         solo.clickOnText(solo.getString(R.string.downloads_label));
@@ -130,7 +138,7 @@ public class MainActivityTest extends ActivityInstrumentationTestCase2<MainActiv
         ListView list = (ListView) solo.getView(R.id.nav_list);
         for (int i = 0; i < uiTestUtils.hostedFeeds.size(); i++) {
             Feed f = uiTestUtils.hostedFeeds.get(i);
-            solo.clickOnScreen(50, 50); // open nav drawer
+            openNavDrawer();
             solo.scrollListToLine(list, i);
             solo.clickOnText(f.getTitle());
             solo.waitForView(android.R.id.list);

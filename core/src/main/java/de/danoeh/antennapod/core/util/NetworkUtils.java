@@ -5,13 +5,9 @@ import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
 import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
+import android.support.v4.net.ConnectivityManagerCompat;
 import android.text.TextUtils;
 import android.util.Log;
-
-import com.squareup.okhttp.OkHttpClient;
-import com.squareup.okhttp.Request;
-import com.squareup.okhttp.Response;
-
 import java.io.File;
 import java.io.IOException;
 import java.util.Arrays;
@@ -21,6 +17,9 @@ import de.danoeh.antennapod.core.feed.FeedMedia;
 import de.danoeh.antennapod.core.preferences.UserPreferences;
 import de.danoeh.antennapod.core.service.download.AntennapodHttpClient;
 import de.danoeh.antennapod.core.storage.DBWriter;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.Response;
 import rx.Observable;
 import rx.Subscriber;
 import rx.android.schedulers.AndroidSchedulers;
@@ -80,23 +79,32 @@ public class NetworkUtils {
     }
 
 	public static boolean isDownloadAllowed() {
-		return UserPreferences.isAllowMobileUpdate() || NetworkUtils.connectedToWifi();
+		return UserPreferences.isAllowMobileUpdate() || !NetworkUtils.isNetworkMetered();
 	}
 
-	public static boolean connectedToWifi() {
+	public static boolean isNetworkMetered() {
 		ConnectivityManager connManager = (ConnectivityManager) context
 				.getSystemService(Context.CONNECTIVITY_SERVICE);
-		NetworkInfo mWifi = connManager
-				.getNetworkInfo(ConnectivityManager.TYPE_WIFI);
-
-		return mWifi.isConnected();
+        return ConnectivityManagerCompat.isActiveNetworkMetered(connManager);
 	}
+
+    /**
+     * Returns the SSID of the wifi connection, or <code>null</code> if there is no wifi.
+     */
+    public static String getWifiSsid() {
+        WifiManager wifiManager = (WifiManager) context.getSystemService(Context.WIFI_SERVICE);
+        WifiInfo wifiInfo = wifiManager.getConnectionInfo();
+        if (wifiInfo != null) {
+            return wifiInfo.getSSID();
+        }
+        return null;
+    }
 
 	public static Observable<Long> getFeedMediaSizeObservable(FeedMedia media) {
         return Observable.create(new Observable.OnSubscribe<Long>() {
             @Override
             public void call(Subscriber<? super Long> subscriber) {
-                if (false == NetworkUtils.isDownloadAllowed()) {
+                if (!NetworkUtils.isDownloadAllowed()) {
                     subscriber.onNext(0L);
                     subscriber.onCompleted();
                     return;
@@ -107,7 +115,7 @@ public class NetworkUtils {
                     if (mediaFile.exists()) {
                         size = mediaFile.length();
                     }
-                } else if (false == media.checkedOnSizeButUnknown()) {
+                } else if (!media.checkedOnSizeButUnknown()) {
                     // only query the network if we haven't already checked
 
                     String url = media.getDownload_url();

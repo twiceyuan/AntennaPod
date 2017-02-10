@@ -1,15 +1,6 @@
 package de.danoeh.antennapod.core.gpoddernet;
 
 import android.support.annotation.NonNull;
-
-import com.squareup.okhttp.Credentials;
-import com.squareup.okhttp.MediaType;
-import com.squareup.okhttp.OkHttpClient;
-import com.squareup.okhttp.Request;
-import com.squareup.okhttp.RequestBody;
-import com.squareup.okhttp.Response;
-import com.squareup.okhttp.ResponseBody;
-
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -38,6 +29,13 @@ import de.danoeh.antennapod.core.gpoddernet.model.GpodnetTag;
 import de.danoeh.antennapod.core.gpoddernet.model.GpodnetUploadChangesResponse;
 import de.danoeh.antennapod.core.preferences.GpodnetPreferences;
 import de.danoeh.antennapod.core.service.download.AntennapodHttpClient;
+import okhttp3.Credentials;
+import okhttp3.MediaType;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.RequestBody;
+import okhttp3.Response;
+import okhttp3.ResponseBody;
 
 /**
  * Communicates with the gpodder.net service.
@@ -80,7 +78,7 @@ public class GpodnetService {
         String response = executeRequest(request);
         try {
             JSONArray jsonTagList = new JSONArray(response);
-            List<GpodnetTag> tagList = new ArrayList<GpodnetTag>(
+            List<GpodnetTag> tagList = new ArrayList<>(
                     jsonTagList.length());
             for (int i = 0; i < jsonTagList.length(); i++) {
                 JSONObject jObj = jsonTagList.getJSONObject(i);
@@ -318,8 +316,7 @@ public class GpodnetService {
             URL url = new URI(BASE_SCHEME, BASE_HOST, String.format(
                     "/subscriptions/%s.opml", username), null).toURL();
             Request.Builder request = new Request.Builder().url(url);
-            String response = executeRequest(request);
-            return response;
+            return executeRequest(request);
         } catch (MalformedURLException | URISyntaxException e) {
             e.printStackTrace();
             throw new GpodnetServiceException(e);
@@ -571,15 +568,7 @@ public class GpodnetService {
             e.printStackTrace();
             throw new GpodnetServiceException(e);
         } finally {
-            if (response != null && body != null) {
-                try {
-                    body.close();
-                } catch (IOException e) {
-                    e.printStackTrace();
-                    throw new GpodnetServiceException(e);
-                }
-            }
-
+            body.close();
         }
         return responseString;
     }
@@ -606,12 +595,7 @@ public class GpodnetService {
             throw new GpodnetServiceException(e);
         } finally {
             if (body != null) {
-                try {
-                    body.close();
-                } catch (IOException e) {
-                    e.printStackTrace();
-                    throw new GpodnetServiceException(e);
-                }
+                body.close();
             }
         }
         return result;
@@ -620,12 +604,7 @@ public class GpodnetService {
     private String getStringFromResponseBody(@NonNull ResponseBody body)
             throws GpodnetServiceException {
         ByteArrayOutputStream outputStream;
-        int contentLength = 0;
-        try {
-            contentLength = (int) body.contentLength();
-        } catch (IOException ignore) {
-            // ignore
-        }
+        int contentLength = (int) body.contentLength();
         if (contentLength > 0) {
             outputStream = new ByteArrayOutputStream(contentLength);
         } else {
@@ -660,7 +639,7 @@ public class GpodnetService {
 
     private List<GpodnetPodcast> readPodcastListFromJSONArray(@NonNull JSONArray array)
             throws JSONException {
-        List<GpodnetPodcast> result = new ArrayList<GpodnetPodcast>(
+        List<GpodnetPodcast> result = new ArrayList<>(
                 array.length());
         for (int i = 0; i < array.length(); i++) {
             result.add(readPodcastFromJSONObject(array.getJSONObject(i)));
@@ -712,7 +691,7 @@ public class GpodnetService {
 
     private List<GpodnetDevice> readDeviceListFromJSONArray(@NonNull JSONArray array)
             throws JSONException {
-        List<GpodnetDevice> result = new ArrayList<GpodnetDevice>(
+        List<GpodnetDevice> result = new ArrayList<>(
                 array.length());
         for (int i = 0; i < array.length(); i++) {
             result.add(readDeviceFromJSONObject(array.getJSONObject(i)));
@@ -732,7 +711,7 @@ public class GpodnetService {
     private GpodnetSubscriptionChange readSubscriptionChangesFromJSONObject(
             @NonNull JSONObject object) throws JSONException {
 
-        List<String> added = new LinkedList<String>();
+        List<String> added = new LinkedList<>();
         JSONArray jsonAdded = object.getJSONArray("add");
         for (int i = 0; i < jsonAdded.length(); i++) {
             String addedUrl = jsonAdded.getString(i);
@@ -741,7 +720,7 @@ public class GpodnetService {
             added.add(addedUrl);
         }
 
-        List<String> removed = new LinkedList<String>();
+        List<String> removed = new LinkedList<>();
         JSONArray jsonRemoved = object.getJSONArray("remove");
         for (int i = 0; i < jsonRemoved.length(); i++) {
             String removedUrl = jsonRemoved.getString(i);
@@ -757,7 +736,7 @@ public class GpodnetService {
     private GpodnetEpisodeActionGetResponse readEpisodeActionsFromJSONObject(
             @NonNull JSONObject object) throws JSONException {
 
-        List<GpodnetEpisodeAction> episodeActions = new ArrayList<GpodnetEpisodeAction>();
+        List<GpodnetEpisodeAction> episodeActions = new ArrayList<>();
 
         long timestamp = object.getLong("timestamp");
         JSONArray jsonActions = object.getJSONArray("actions");

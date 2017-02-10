@@ -18,9 +18,6 @@ import android.widget.ProgressBar;
 import android.widget.TextView;
 
 import com.afollestad.materialdialogs.MaterialDialog;
-import com.squareup.okhttp.OkHttpClient;
-import com.squareup.okhttp.Request;
-import com.squareup.okhttp.Response;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -39,6 +36,9 @@ import de.danoeh.antennapod.adapter.itunes.ItunesAdapter;
 import de.danoeh.antennapod.core.ClientConfig;
 import de.danoeh.antennapod.core.service.download.AntennapodHttpClient;
 import de.danoeh.antennapod.menuhandler.MenuItemUtils;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.Response;
 import rx.Observable;
 import rx.Subscription;
 import rx.android.schedulers.AndroidSchedulers;
@@ -124,7 +124,7 @@ public class ItunesSearchFragment extends Fragment {
             } else {
                 gridView.setVisibility(View.GONE);
                 progressBar.setVisibility(View.VISIBLE);
-                rx.Observable.create((Observable.OnSubscribe<String>) subscriber -> {
+                subscription = Observable.create((Observable.OnSubscribe<String>) subscriber -> {
                             OkHttpClient client = AntennapodHttpClient.getHttpClient();
                             Request.Builder httpReq = new Request.Builder()
                                     .url(podcast.feedUrl)
@@ -233,7 +233,7 @@ public class ItunesSearchFragment extends Fragment {
         butRetry.setVisibility(View.GONE);
         txtvEmpty.setVisibility(View.GONE);
         progressBar.setVisibility(View.VISIBLE);
-        subscription = rx.Observable.create((Observable.OnSubscribe<List<Podcast>>) subscriber -> {
+        subscription = Observable.create((Observable.OnSubscribe<List<Podcast>>) subscriber -> {
                     String lang = Locale.getDefault().getLanguage();
                     String url = "https://itunes.apple.com/" + lang + "/rss/toppodcasts/limit=25/explicit=true/json";
                     OkHttpClient client = AntennapodHttpClient.getHttpClient();

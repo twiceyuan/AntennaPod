@@ -8,7 +8,7 @@ import android.content.Context;
 import android.os.ParcelFileDescriptor;
 import android.util.Log;
 
-import de.danoeh.antennapod.core.BuildConfig;
+import org.apache.commons.io.IOUtils;
 import org.xmlpull.v1.XmlPullParserException;
 
 import java.io.ByteArrayOutputStream;
@@ -26,12 +26,12 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Date;
 
+import de.danoeh.antennapod.core.BuildConfig;
+import de.danoeh.antennapod.core.export.opml.OpmlElement;
+import de.danoeh.antennapod.core.export.opml.OpmlReader;
+import de.danoeh.antennapod.core.export.opml.OpmlWriter;
 import de.danoeh.antennapod.core.feed.Feed;
-import de.danoeh.antennapod.core.opml.OpmlElement;
-import de.danoeh.antennapod.core.opml.OpmlReader;
-import de.danoeh.antennapod.core.opml.OpmlWriter;
 import de.danoeh.antennapod.core.storage.DBReader;
 import de.danoeh.antennapod.core.storage.DownloadRequestException;
 import de.danoeh.antennapod.core.storage.DownloadRequester;
@@ -45,19 +45,21 @@ public class OpmlBackupAgent extends BackupAgentHelper {
         addHelper(OPML_BACKUP_KEY, new OpmlBackupHelper(this));
     }
 
-    private static final void LOGD(String tag, String msg) {
+    private static void LOGD(String tag, String msg) {
         if (BuildConfig.DEBUG && Log.isLoggable(tag, Log.DEBUG)) {
             Log.d(tag, msg);
         }
     }
 
-    private static final void LOGD(String tag, String msg, Throwable tr) {
+    private static void LOGD(String tag, String msg, Throwable tr) {
         if (BuildConfig.DEBUG && Log.isLoggable(tag, Log.DEBUG)) {
             Log.d(tag, msg, tr);
         }
     }
 
-    /** Class for backing up and restoring the OPML file. */
+    /**
+     * Class for backing up and restoring the OPML file.
+     */
     private static class OpmlBackupHelper implements BackupHelper {
         private static final String TAG = "OpmlBackupHelper";
 
@@ -65,7 +67,9 @@ public class OpmlBackupAgent extends BackupAgentHelper {
 
         private final Context mContext;
 
-        /** Checksum of restored OPML file */
+        /**
+         * Checksum of restored OPML file
+         */
         private byte[] mChecksum;
 
         public OpmlBackupHelper(Context context) {
@@ -171,12 +175,7 @@ public class OpmlBackupAgent extends BackupAgentHelper {
             } catch (IOException e) {
                 Log.e(TAG, "Failed to restore OPML backup", e);
             } finally {
-                if (reader != null) {
-                    try {
-                        reader.close();
-                    } catch (IOException e) {
-                    }
-                }
+                IOUtils.closeQuietly(reader);
             }
         }
 

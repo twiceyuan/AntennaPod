@@ -230,9 +230,8 @@ public class QueueFragment extends Fragment {
         resetViewState();
     }
 
-    private final MenuItemUtils.UpdateRefreshMenuItemChecker updateRefreshMenuItemChecker = () -> {
-        return DownloadService.isRunning && DownloadRequester.getInstance().isDownloadingFeeds();
-    };
+    private final MenuItemUtils.UpdateRefreshMenuItemChecker updateRefreshMenuItemChecker =
+            () -> DownloadService.isRunning && DownloadRequester.getInstance().isDownloadingFeeds();
 
     @Override
     public void onCreateOptionsMenu(Menu menu, MenuInflater inflater) {
@@ -305,11 +304,11 @@ public class QueueFragment extends Fragment {
                     };
                     conDialog.createNewDialog().show();
                     return true;
-                case R.id.queue_sort_alpha_asc:
-                    QueueSorter.sort(getActivity(), QueueSorter.Rule.ALPHA_ASC, true);
+                case R.id.queue_sort_episode_title_asc:
+                    QueueSorter.sort(getActivity(), QueueSorter.Rule.EPISODE_TITLE_ASC, true);
                     return true;
-                case R.id.queue_sort_alpha_desc:
-                    QueueSorter.sort(getActivity(), QueueSorter.Rule.ALPHA_DESC, true);
+                case R.id.queue_sort_episode_title_desc:
+                    QueueSorter.sort(getActivity(), QueueSorter.Rule.EPISODE_TITLE_DESC, true);
                     return true;
                 case R.id.queue_sort_date_asc:
                     QueueSorter.sort(getActivity(), QueueSorter.Rule.DATE_ASC, true);
@@ -322,6 +321,12 @@ public class QueueFragment extends Fragment {
                     return true;
                 case R.id.queue_sort_duration_desc:
                     QueueSorter.sort(getActivity(), QueueSorter.Rule.DURATION_DESC, true);
+                    return true;
+                case R.id.queue_sort_feed_title_asc:
+                    QueueSorter.sort(getActivity(), QueueSorter.Rule.FEED_TITLE_ASC, true);
+                    return true;
+                case R.id.queue_sort_feed_title_desc:
+                    QueueSorter.sort(getActivity(), QueueSorter.Rule.FEED_TITLE_DESC, true);
                     return true;
                 default:
                     return false;
@@ -410,12 +415,12 @@ public class QueueFragment extends Fragment {
                     Log.d(TAG, "remove(" + position + ")");
                     final FeedItem item = queue.get(position);
                     final boolean isRead = item.isPlayed();
-                    DBWriter.markItemPlayed(FeedItem.PLAYED, item.getId());
+                    DBWriter.markItemPlayed(FeedItem.PLAYED, false, item.getId());
                     DBWriter.removeQueueItem(getActivity(), item, true);
                     Snackbar snackbar = Snackbar.make(root, getString(R.string.marked_as_read_label), Snackbar.LENGTH_LONG);
                     snackbar.setAction(getString(R.string.undo), v -> {
                         DBWriter.addQueueItemAt(getActivity(), item.getId(), position, false);
-                        if(false == isRead) {
+                        if(!isRead) {
                             DBWriter.markItemPlayed(FeedItem.UNPLAYED, item.getId());
                         }
                     });
@@ -424,12 +429,12 @@ public class QueueFragment extends Fragment {
 
                 @Override
                 public boolean isLongPressDragEnabled() {
-                    return false == UserPreferences.isQueueLocked();
+                    return !UserPreferences.isQueueLocked();
                 }
 
                 @Override
                 public boolean isItemViewSwipeEnabled() {
-                    return false == UserPreferences.isQueueLocked();
+                    return !UserPreferences.isQueueLocked();
                 }
 
                 @Override
@@ -474,6 +479,7 @@ public class QueueFragment extends Fragment {
             MainActivity activity = (MainActivity) getActivity();
             recyclerAdapter = new QueueRecyclerAdapter(activity, itemAccess,
                 new DefaultActionButtonCallback(activity), itemTouchHelper);
+            recyclerAdapter.setHasStableIds(true);
             recyclerView.setAdapter(recyclerAdapter);
         }
         if(queue == null || queue.size() == 0) {
@@ -568,20 +574,6 @@ public class QueueFragment extends Fragment {
         public LongList getQueueIds() {
             return queue != null ? LongList.of(FeedItemUtil.getIds(queue)) : new LongList(0);
         }
-
-        @Override
-        public LongList getFavoritesIds() {
-            LongList favoritesIds = new LongList();
-            if(queue == null) {
-                return favoritesIds;
-            }
-            for(FeedItem item : queue) {
-                if(item.isTagged(FeedItem.TAG_FAVORITE)) {
-                    favoritesIds.add(item.getId());
-                }
-            }
-            return favoritesIds;
-        }
     };
 
     private EventDistributor.EventListener contentUpdate = new EventDistributor.EventListener() {
@@ -607,7 +599,7 @@ public class QueueFragment extends Fragment {
             txtvEmpty.setVisibility(View.GONE);
             progLoading.setVisibility(View.VISIBLE);
         }
-        subscription = Observable.fromCallable(() -> DBReader.getQueue())
+        subscription = Observable.fromCallable(DBReader::getQueue)
                 .subscribeOn(Schedulers.newThread())
                 .observeOn(AndroidSchedulers.mainThread())
                 .subscribe(items -> {
@@ -619,9 +611,7 @@ public class QueueFragment extends Fragment {
                             recyclerAdapter.notifyDataSetChanged();
                         }
                     }
-                }, error -> {
-                    Log.e(TAG, Log.getStackTraceString(error));
-                });
+                }, error -> Log.e(TAG, Log.getStackTraceString(error)));
     }
 
 }

@@ -1,9 +1,7 @@
 package de.danoeh.antennapod.adapter;
 
 import android.content.Context;
-import android.content.DialogInterface;
 import android.content.Intent;
-import android.support.v7.app.AlertDialog;
 import android.widget.Toast;
 
 import com.afollestad.materialdialogs.MaterialDialog;
@@ -53,13 +51,12 @@ public class DefaultActionButtonCallback implements ActionButtonCallback {
     }
 
     @Override
-    public void onActionButtonPressed(final FeedItem item) {
+    public void onActionButtonPressed(final FeedItem item, final LongList queueIds) {
 
         if (item.hasMedia()) {
             final FeedMedia media = item.getMedia();
             boolean isDownloading = DownloadRequester.getInstance().isDownloadingFile(media);
             if (!isDownloading && !media.isDownloaded()) {
-                LongList queueIds = DBReader.getQueueIDList();
                 if (NetworkUtils.isDownloadAllowed() || userAllowedMobileDownloads()) {
                     try {
                         DBTasks.downloadFeedItems(context, item);

@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import de.danoeh.antennapod.core.storage.DBReader;
+import de.danoeh.antennapod.core.util.LongList;
 
 public class FeedItemFilter {
     private final String[] mProperties;
@@ -17,6 +18,7 @@ public class FeedItemFilter {
     private boolean showNotQueued = false;
     private boolean showDownloaded = false;
     private boolean showNotDownloaded = false;
+    private boolean showHasMedia = false;
 
     public FeedItemFilter(String properties) {
         this(TextUtils.split(properties, ","));
@@ -48,6 +50,9 @@ public class FeedItemFilter {
                 case "not_downloaded":
                     showNotDownloaded = true;
                     break;
+                case "has_media":
+                    showHasMedia = true;
+                    break;
             }
         }
     }
@@ -66,19 +71,22 @@ public class FeedItemFilter {
         if (showQueued && showNotQueued) return result;
         if (showDownloaded && showNotDownloaded) return result;
 
+        final LongList queuedIds =  DBReader.getQueueIDList();
         for(FeedItem item : items) {
             // If the item does not meet a requirement, skip it.
             if (showPlayed && !item.isPlayed()) continue;
             if (showUnplayed && item.isPlayed()) continue;
             if (showPaused && item.getState() != FeedItem.State.IN_PROGRESS) continue;
 
-            boolean queued = DBReader.getQueueIDList().contains(item.getId());
+            boolean queued = queuedIds.contains(item.getId());
             if (showQueued && !queued) continue;
             if (showNotQueued && queued) continue;
 
             boolean downloaded = item.getMedia() != null && item.getMedia().isDownloaded();
             if (showDownloaded && !downloaded) continue;
             if (showNotDownloaded && downloaded) continue;
+
+            if (showHasMedia && !item.hasMedia()) continue;
 
             // If the item reaches here, it meets all criteria
             result.add(item);

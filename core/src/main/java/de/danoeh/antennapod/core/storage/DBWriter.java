@@ -4,7 +4,6 @@ import android.app.backup.BackupManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
-import android.database.Cursor;
 import android.preference.PreferenceManager;
 import android.util.Log;
 
@@ -14,7 +13,6 @@ import java.io.File;
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Date;
@@ -132,7 +130,7 @@ public class DBWriter {
                     }
                 }
                 Log.d(TAG, "Deleting File. Result: " + result);
-                EventBus.getDefault().post(FeedItemEvent.deletedMedia(Arrays.asList(media.getItem())));
+                EventBus.getDefault().post(FeedItemEvent.deletedMedia(Collections.singletonList(media.getItem())));
                 EventDistributor.getInstance().sendUnreadItemsUpdateBroadcast();
             }
         });
@@ -273,8 +271,6 @@ public class DBWriter {
         return dbExec.submit(() -> {
             Log.d(TAG, "Adding new item to playback history");
             media.setPlaybackCompletionDate(new Date());
-            // reset played_duration to 0 so that it behaves correctly when the episode is played again
-            media.setPlayedDuration(0);
 
             PodDBAdapter adapter = PodDBAdapter.getInstance();
             adapter.open();
@@ -327,6 +323,7 @@ public class DBWriter {
                         adapter.setQueue(queue);
                         item.addTag(FeedItem.TAG_QUEUE);
                         EventBus.getDefault().post(QueueEvent.added(item, index));
+                        EventBus.getDefault().post(FeedItemEvent.updated(item));
                         if (item.isNew()) {
                             DBWriter.markItemPlayed(FeedItem.UNPLAYED, item.getId());
                         }
@@ -372,7 +369,8 @@ public class DBWriter {
                 if (queue != null) {
                     boolean queueModified = false;
                     LongList markAsUnplayedIds = new LongList();
-                    List<QueueEvent> events = new ArrayList<QueueEvent>();
+                    List<QueueEvent> events = new ArrayList<>();
+                    List<FeedItem> updatedItems = new ArrayList<>();
                     for (int i = 0; i < itemIds.length; i++) {
                         if (!itemListContains(queue, itemIds[i])) {
                             final FeedItem item = DBReader.getFeedItem(itemIds[i]);
@@ -388,6 +386,8 @@ public class DBWriter {
                                     queue.add(item);
                                     events.add(QueueEvent.added(item, queue.size() - 1));
                                 }
+                                item.addTag(FeedItem.TAG_QUEUE);
+                                updatedItems.add(item);
                                 queueModified = true;
                                 if (item.isNew()) {
                                     markAsUnplayedIds.add(item.getId());
@@ -400,6 +400,7 @@ public class DBWriter {
                         for (QueueEvent event : events) {
                             EventBus.getDefault().post(event);
                         }
+                        EventBus.getDefault().post(FeedItemEvent.updated(updatedItems));
                         if (markAsUnplayedIds.size() > 0) {
                             DBWriter.markItemPlayed(FeedItem.UNPLAYED, markAsUnplayedIds.toArray());
                         }
@@ -449,6 +450,7 @@ public class DBWriter {
                     adapter.setQueue(queue);
                     item.removeTag(FeedItem.TAG_QUEUE);
                     EventBus.getDefault().post(QueueEvent.removed(item));
+                    EventBus.getDefault().post(FeedItemEvent.updated(item));
                 } else {
                     Log.w(TAG, "Queue was not modified by call to removeQueueItem");
                 }
@@ -470,6 +472,7 @@ public class DBWriter {
             adapter.close();
             item.addTag(FeedItem.TAG_FAVORITE);
             EventBus.getDefault().post(FavoritesEvent.added(item));
+            EventBus.getDefault().post(FeedItemEvent.updated(item));
         });
     }
 
@@ -485,6 +488,7 @@ public class DBWriter {
             adapter.close();
             item.addTag(FeedItem.TAG_FAVORITE);
             EventBus.getDefault().post(FavoritesEvent.added(item));
+            EventBus.getDefault().post(FeedItemEvent.updated(item));
         });
     }
 
@@ -495,6 +499,7 @@ public class DBWriter {
             adapter.close();
             item.removeTag(FeedItem.TAG_FAVORITE);
             EventBus.getDefault().post(FavoritesEvent.removed(item));
+            EventBus.getDefault().post(FeedItemEvent.updated(item));
         });
     }
 
@@ -545,9 +550,7 @@ public class DBWriter {
      */
     public static Future<?> moveQueueItem(final int from,
                                           final int to, final boolean broadcastUpdate) {
-        return dbExec.submit(() -> {
-            moveQueueItemHelper(from, to, broadcastUpdate);
-        });
+        return dbExec.submit(() -> moveQueueItemHelper(from, to, broadcastUpdate));
     }
 
     /**
@@ -586,18 +589,33 @@ public class DBWriter {
     /*
      * Sets the 'read'-attribute of all specified FeedItems
      *
-     * @param context A context that is used for opening a database connection.
      * @param played  New value of the 'read'-attribute, one of FeedItem.PLAYED, FeedItem.NEW,
      *                FeedItem.UNPLAYED
      * @param itemIds IDs of the FeedItems.
      */
     public static Future<?> markItemPlayed(final int played, final long... itemIds) {
+        return markItemPlayed(played, true, itemIds);
+    }
+
+    /*
+     * Sets the 'read'-attribute of all specified FeedItems
+     *
+     * @param played  New value of the 'read'-attribute, one of FeedItem.PLAYED, FeedItem.NEW,
+     *                FeedItem.UNPLAYED
+     * @param broadcastUpdate true if this operation should trigger a UnreadItemsUpdate broadcast.
+     *        This option is usually set to true
+     * @param itemIds IDs of the FeedItems.
+     */
+    public static Future<?> markItemPlayed(final int played, final boolean broadcastUpdate,
+                                           final long... itemIds) {
         return dbExec.submit(() -> {
             final PodDBAdapter adapter = PodDBAdapter.getInstance();
             adapter.open();
             adapter.setFeedItemRead(played, itemIds);
             adapter.close();
-            EventDistributor.getInstance().sendUnreadItemsUpdateBroadcast();
+            if(broadcastUpdate) {
+                EventDistributor.getInstance().sendUnreadItemsUpdateBroadcast();
+            }
         });
     }
 
@@ -630,7 +648,7 @@ public class DBWriter {
     }
 
     /**
-     * Sets the 'read'-attribute of all FeedItems of a specific Feed to true.
+     * Sets the 'read'-attribute of all NEW FeedItems of a specific Feed to UNPLAYED.
      *
      * @param feedId  ID of the Feed.
      */
@@ -638,15 +656,7 @@ public class DBWriter {
         return dbExec.submit(() -> {
             final PodDBAdapter adapter = PodDBAdapter.getInstance();
             adapter.open();
-            Cursor itemCursor = adapter.getNewItemsIdsCursor(feedId);
-            long[] ids = new long[itemCursor.getCount()];
-            itemCursor.moveToFirst();
-            for (int i = 0; i < ids.length; i++) {
-                ids[i] = itemCursor.getLong(0);
-                itemCursor.moveToNext();
-            }
-            itemCursor.close();
-            adapter.setFeedItemRead(FeedItem.UNPLAYED, ids);
+            adapter.setFeedItems(FeedItem.NEW, FeedItem.UNPLAYED, feedId);
             adapter.close();
 
             EventDistributor.getInstance().sendUnreadItemsUpdateBroadcast();
@@ -654,7 +664,7 @@ public class DBWriter {
     }
 
     /**
-     * Sets the 'read'-attribute of all FeedItems of a specific Feed to true.
+     * Sets the 'read'-attribute of all FeedItems of a specific Feed to PLAYED.
      *
      * @param feedId  ID of the Feed.
      */
@@ -662,16 +672,7 @@ public class DBWriter {
         return dbExec.submit(() -> {
             final PodDBAdapter adapter = PodDBAdapter.getInstance();
             adapter.open();
-            Cursor itemCursor = adapter.getAllItemsOfFeedCursor(feedId);
-            long[] itemIds = new long[itemCursor.getCount()];
-            itemCursor.moveToFirst();
-            for (int i = 0; i < itemIds.length; i++) {
-                int indexId = itemCursor.getColumnIndex(PodDBAdapter.KEY_ID);
-                itemIds[i] = itemCursor.getLong(indexId);
-                itemCursor.moveToNext();
-            }
-            itemCursor.close();
-            adapter.setFeedItemRead(FeedItem.PLAYED, itemIds);
+            adapter.setFeedItems(FeedItem.PLAYED, feedId);
             adapter.close();
 
             EventDistributor.getInstance().sendUnreadItemsUpdateBroadcast();
@@ -679,27 +680,31 @@ public class DBWriter {
     }
 
     /**
-     * Sets the 'read'-attribute of all FeedItems to true.
+     * Sets the 'read'-attribute of all FeedItems to PLAYED.
      */
     public static Future<?> markAllItemsRead() {
         return dbExec.submit(() -> {
             final PodDBAdapter adapter = PodDBAdapter.getInstance();
             adapter.open();
-            Cursor itemCursor = adapter.getUnreadItemsCursor();
-            long[] itemIds = new long[itemCursor.getCount()];
-            itemCursor.moveToFirst();
-            for (int i = 0; i < itemIds.length; i++) {
-                int indexId = itemCursor.getColumnIndex(PodDBAdapter.KEY_ID);
-                itemIds[i] = itemCursor.getLong(indexId);
-                itemCursor.moveToNext();
-            }
-            itemCursor.close();
-            adapter.setFeedItemRead(FeedItem.PLAYED, itemIds);
+            adapter.setFeedItems(FeedItem.PLAYED);
             adapter.close();
 
             EventDistributor.getInstance().sendUnreadItemsUpdateBroadcast();
         });
+    }
 
+    /**
+     * Sets the 'read'-attribute of all NEW FeedItems to UNPLAYED.
+     */
+    public static Future<?> markNewItemsSeen() {
+        return dbExec.submit(() -> {
+            final PodDBAdapter adapter = PodDBAdapter.getInstance();
+            adapter.open();
+            adapter.setFeedItems(FeedItem.NEW, FeedItem.UNPLAYED);
+            adapter.close();
+
+            EventDistributor.getInstance().sendUnreadItemsUpdateBroadcast();
+        });
     }
 
     static Future<?> addNewFeed(final Context context, final Feed... feeds) {
@@ -878,6 +883,17 @@ public class DBWriter {
             adapter.close();
         });
     }
+
+    public static Future<?> setFeedCustomTitle(Feed feed) {
+        return dbExec.submit(() -> {
+            PodDBAdapter adapter = PodDBAdapter.getInstance();
+            adapter.open();
+            adapter.setFeedCustomTitle(feed.getId(), feed.getCustomTitle());
+            adapter.close();
+            EventDistributor.getInstance().sendFeedUpdateBroadcast();
+        });
+    }
+
 
     /**
      * format an url for querying the database

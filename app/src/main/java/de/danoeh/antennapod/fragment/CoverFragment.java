@@ -12,14 +12,14 @@ import android.widget.TextView;
 import com.bumptech.glide.Glide;
 
 import de.danoeh.antennapod.R;
-import de.danoeh.antennapod.activity.AudioplayerActivity.AudioplayerContentFragment;
+import de.danoeh.antennapod.activity.MediaplayerInfoActivity.MediaplayerInfoContentFragment;
 import de.danoeh.antennapod.core.glide.ApGlideSettings;
 import de.danoeh.antennapod.core.util.playback.Playable;
 
 /**
  * Displays the cover and the title of a FeedItem.
  */
-public class CoverFragment extends Fragment implements AudioplayerContentFragment {
+public class CoverFragment extends Fragment implements MediaplayerInfoContentFragment {
 
     private static final String TAG = "CoverFragment";
     private static final String ARG_PLAYABLE = "arg.playable";
@@ -33,22 +33,15 @@ public class CoverFragment extends Fragment implements AudioplayerContentFragmen
 
     public static CoverFragment newInstance(Playable item) {
         CoverFragment f = new CoverFragment();
-        if (item != null) {
-            Bundle args = new Bundle();
-            args.putParcelable(ARG_PLAYABLE, item);
-            f.setArguments(args);
-        }
+        f.media = item;
         return f;
     }
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        Bundle args = getArguments();
-        if (args != null) {
-            media = args.getParcelable(ARG_PLAYABLE);
-        } else {
-            Log.e(TAG, TAG + " was called with invalid arguments");
+        if (media == null) {
+            Log.e(TAG, TAG + " was called without media");
         }
     }
 
@@ -67,7 +60,7 @@ public class CoverFragment extends Fragment implements AudioplayerContentFragmen
             txtvPodcastTitle.setText(media.getFeedTitle());
             txtvEpisodeTitle.setText(media.getEpisodeTitle());
             Glide.with(this)
-                    .load(media.getImageUri())
+                    .load(media.getImageLocation())
                     .diskCacheStrategy(ApGlideSettings.AP_DISK_CACHE_STRATEGY)
                     .dontAnimate()
                     .fitCenter()
@@ -98,11 +91,13 @@ public class CoverFragment extends Fragment implements AudioplayerContentFragmen
 
     @Override
     public void onMediaChanged(Playable media) {
-        if(!isAdded() || this.media == media) {
+        if(this.media == media) {
             return;
         }
         this.media = media;
-        loadMediaInfo();
+        if (isAdded()) {
+            loadMediaInfo();
+        }
     }
 
 }

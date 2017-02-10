@@ -41,27 +41,34 @@ public class TypeGetter {
 				while (eventType != XmlPullParser.END_DOCUMENT) {
 					if (eventType == XmlPullParser.START_TAG) {
 						String tag = xpp.getName();
-						if (tag.equals(ATOM_ROOT)) {
-							feed.setType(Feed.TYPE_ATOM1);
-							Log.d(TAG, "Recognized type Atom");
-							return Type.ATOM;
-						} else if (tag.equals(RSS_ROOT)) {
-							String strVersion = xpp.getAttributeValue(null, "version");
-							if (strVersion != null) {
-								if (strVersion.equals("2.0")) {
-									feed.setType(Feed.TYPE_RSS2);
-									Log.d(TAG, "Recognized type RSS 2.0");
-									return Type.RSS20;
-								} else if (strVersion.equals("0.91")
-										|| strVersion.equals("0.92")) {
-									Log.d(TAG, "Recognized type RSS 0.91/0.92");
-									return Type.RSS091;
+						switch (tag) {
+							case ATOM_ROOT:
+								feed.setType(Feed.TYPE_ATOM1);
+								Log.d(TAG, "Recognized type Atom");
+
+								String strLang = xpp.getAttributeValue("http://www.w3.org/XML/1998/namespace", "lang");
+								if (strLang != null) {
+									feed.setLanguage(strLang);
 								}
-							}
-							throw new UnsupportedFeedtypeException(Type.INVALID);
-						} else {
-							Log.d(TAG, "Type is invalid");
-							throw new UnsupportedFeedtypeException(Type.INVALID, tag);
+
+								return Type.ATOM;
+							case RSS_ROOT:
+								String strVersion = xpp.getAttributeValue(null, "version");
+								if (strVersion != null) {
+									if (strVersion.equals("2.0")) {
+										feed.setType(Feed.TYPE_RSS2);
+										Log.d(TAG, "Recognized type RSS 2.0");
+										return Type.RSS20;
+									} else if (strVersion.equals("0.91")
+											|| strVersion.equals("0.92")) {
+										Log.d(TAG, "Recognized type RSS 0.91/0.92");
+										return Type.RSS091;
+									}
+								}
+								throw new UnsupportedFeedtypeException(Type.INVALID);
+							default:
+								Log.d(TAG, "Type is invalid");
+								throw new UnsupportedFeedtypeException(Type.INVALID, tag);
 						}
 					} else {
 						eventType = xpp.next();
@@ -77,9 +84,8 @@ public class TypeGetter {
                     }
                 } catch (IOException e1) {
                     e1.printStackTrace();
-                } finally {
-                    throw new UnsupportedFeedtypeException(Type.INVALID, rootElement);
                 }
+                throw new UnsupportedFeedtypeException(Type.INVALID, rootElement);
 
             } catch (IOException e) {
 				e.printStackTrace();

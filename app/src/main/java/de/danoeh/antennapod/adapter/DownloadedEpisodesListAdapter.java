@@ -1,6 +1,8 @@
 package de.danoeh.antennapod.adapter;
 
 import android.content.Context;
+import android.os.Build;
+import android.text.Layout;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -10,6 +12,7 @@ import android.widget.ImageView;
 import android.widget.TextView;
 
 import com.bumptech.glide.Glide;
+import com.nineoldandroids.view.ViewHelper;
 
 import de.danoeh.antennapod.R;
 import de.danoeh.antennapod.core.feed.FeedItem;
@@ -60,6 +63,9 @@ public class DownloadedEpisodesListAdapter extends BaseAdapter {
                     parent, false);
             holder.imageView = (ImageView) convertView.findViewById(R.id.imgvImage);
             holder.title = (TextView) convertView.findViewById(R.id.txtvTitle);
+            if(Build.VERSION.SDK_INT >= 23) {
+                holder.title.setHyphenationFrequency(Layout.HYPHENATION_FREQUENCY_FULL);
+            }
             holder.txtvSize = (TextView) convertView.findViewById(R.id.txtvSize);
             holder.queueStatus = (ImageView) convertView.findViewById(R.id.imgvInPlaylist);
             holder.pubDate = (TextView) convertView
@@ -72,13 +78,19 @@ public class DownloadedEpisodesListAdapter extends BaseAdapter {
         }
 
         Glide.with(context)
-                .load(item.getImageUri())
+                .load(item.getImageLocation())
                 .placeholder(R.color.light_gray)
                 .error(R.color.light_gray)
                 .diskCacheStrategy(ApGlideSettings.AP_DISK_CACHE_STRATEGY)
                 .fitCenter()
                 .dontAnimate()
                 .into(holder.imageView);
+
+        if(item.isPlayed()) {
+            ViewHelper.setAlpha(convertView, 0.5f);
+        } else {
+            ViewHelper.setAlpha(convertView, 1.0f);
+        }
 
         holder.title.setText(item.getTitle());
         holder.txtvSize.setText(Converter.byteToString(item.getMedia().getSize()));

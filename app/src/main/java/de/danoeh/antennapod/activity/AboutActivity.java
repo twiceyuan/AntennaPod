@@ -4,7 +4,7 @@ import android.content.res.TypedArray;
 import android.graphics.Color;
 import android.os.Build;
 import android.os.Bundle;
-import android.support.v7.app.ActionBarActivity;
+import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
 import android.view.MenuItem;
 import android.view.View;
@@ -30,7 +30,7 @@ import rx.schedulers.Schedulers;
 /**
  * Displays the 'about' screen
  */
-public class AboutActivity extends ActionBarActivity {
+public class AboutActivity extends AppCompatActivity {
 
     private static final String TAG = AboutActivity.class.getSimpleName();
 
@@ -87,7 +87,7 @@ public class AboutActivity extends ActionBarActivity {
                             res.recycle();
                             input = getAssets().open(filename);
                             String webViewData = IOUtils.toString(input, Charset.defaultCharset());
-                            if(false == webViewData.startsWith("<!DOCTYPE html>")) {
+                            if(!webViewData.startsWith("<!DOCTYPE html>")) {
                                 //webViewData = webViewData.replace("\n\n", "</p><p>");
                                 webViewData = webViewData.replace("%", "&#37;");
                                 webViewData =
@@ -124,12 +124,11 @@ public class AboutActivity extends ActionBarActivity {
                 })
                 .subscribeOn(Schedulers.newThread())
                 .observeOn(AndroidSchedulers.mainThread())
-                .subscribe(webviewData -> {
-                    webview.loadDataWithBaseURL("file:///android_asset/", webviewData, "text/html",
-                            "utf-8", "about:blank");
-                }, error -> {
-                    Log.e(TAG, Log.getStackTraceString(error));
-                });
+                .subscribe(
+                        webviewData ->
+                                webview.loadDataWithBaseURL("file:///android_asset/", webviewData, "text/html", "utf-8", "about:blank"),
+                        error -> Log.e(TAG, Log.getStackTraceString(error))
+                );
     }
 
     @Override

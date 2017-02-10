@@ -1,5 +1,6 @@
 package de.danoeh.antennapod.core.syndication.namespace.atom;
 
+import android.text.TextUtils;
 import android.util.Log;
 
 import org.xml.sax.Attributes;
@@ -27,8 +28,11 @@ public class NSAtom extends Namespace {
     private static final String LINK = "link";
     private static final String UPDATED = "updated";
     private static final String AUTHOR = "author";
+    private static final String AUTHOR_NAME = "name";
     private static final String CONTENT = "content";
-    private static final String IMAGE = "logo";
+    private static final String SUMMARY = "summary";
+    private static final String IMAGE_LOGO = "logo";
+    private static final String IMAGE_ICON = "icon";
     private static final String SUBTITLE = "subtitle";
     private static final String PUBLISHED = "published";
 
@@ -41,6 +45,7 @@ public class NSAtom extends Namespace {
     private static final String LINK_LENGTH = "length";
     // rel-values
     private static final String LINK_REL_ALTERNATE = "alternate";
+    private static final String LINK_REL_ARCHIVES = "archives";
     private static final String LINK_REL_ENCLOSURE = "enclosure";
     private static final String LINK_REL_PAYMENT = "payment";
     private static final String LINK_REL_RELATED = "related";
@@ -56,8 +61,8 @@ public class NSAtom extends Namespace {
     /**
      * Regexp to test whether an Element is a Text Element.
      */
-    private static final String isText = TITLE + "|" + CONTENT + "|" + "|"
-            + SUBTITLE;
+    private static final String isText = TITLE + "|" + CONTENT + "|"
+            + SUBTITLE + "|" + SUMMARY;
 
     public static final String isFeed = FEED + "|" + NSRSS20.CHANNEL;
     public static final String isFeedItem = ENTRY + "|" + NSRSS20.ITEM;
@@ -65,21 +70,21 @@ public class NSAtom extends Namespace {
     @Override
     public SyndElement handleElementStart(String localName, HandlerState state,
                                           Attributes attributes) {
-        if (localName.equals(ENTRY)) {
+        if (ENTRY.equals(localName)) {
             state.setCurrentItem(new FeedItem());
             state.getItems().add(state.getCurrentItem());
             state.getCurrentItem().setFeed(state.getFeed());
         } else if (localName.matches(isText)) {
             String type = attributes.getValue(TEXT_TYPE);
             return new AtomText(localName, this, type);
-        } else if (localName.equals(LINK)) {
+        } else if (LINK.equals(localName)) {
             String href = attributes.getValue(LINK_HREF);
             String rel = attributes.getValue(LINK_REL);
             SyndElement parent = state.getTagstack().peek();
             if (parent.getName().matches(isFeedItem)) {
-                if (rel == null || rel.equals(LINK_REL_ALTERNATE)) {
+                if (LINK_REL_ALTERNATE.equals(rel)) {
                     state.getCurrentItem().setLink(href);
-                } else if (rel.equals(LINK_REL_ENCLOSURE)) {
+                } else if (LINK_REL_ENCLOSURE.equals(rel)) {
                     String strSize = attributes.getValue(LINK_LENGTH);
                     long size = 0;
                     try {
@@ -90,40 +95,54 @@ public class NSAtom extends Namespace {
                         Log.d(TAG, "Length attribute could not be parsed.");
                     }
                     String type = attributes.getValue(LINK_TYPE);
-                    if (SyndTypeUtils.enclosureTypeValid(type)
-                            || (type = SyndTypeUtils.getValidMimeTypeFromUrl(href)) != null) {
+
+                    if (type == null) {
+                        type = SyndTypeUtils.getMimeTypeFromUrl(href);
+                    }
+
+                    if(SyndTypeUtils.enclosureTypeValid(type)) {
                         FeedItem currItem = state.getCurrentItem();
-                        if(!currItem.hasMedia()) {
+                        if(currItem != null && !currItem.hasMedia()) {
                             currItem.setMedia(new FeedMedia(currItem, href, size, type));
                         }
                     }
-                } else if (rel.equals(LINK_REL_PAYMENT)) {
+                } else if (LINK_REL_PAYMENT.equals(rel)) {
                     state.getCurrentItem().setPaymentLink(href);
                 }
             } else if (parent.getName().matches(isFeed)) {
-                if (rel == null || rel.equals(LINK_REL_ALTERNATE)) {
+                if (LINK_REL_ALTERNATE.equals(rel)) {
                     String type = attributes.getValue(LINK_TYPE);
                     /*
                      * Use as link if a) no type-attribute is given and
 					 * feed-object has no link yet b) type of link is
 					 * LINK_TYPE_HTML or LINK_TYPE_XHTML
 					 */
-                    if ((type == null && state.getFeed().getLink() == null)
-                            || (type != null && (type.equals(LINK_TYPE_HTML)
-                            || type.equals(LINK_TYPE_XHTML)))) {
+                    if (state.getFeed() != null &&
+                        ((type == null && state.getFeed().getLink() == null) ||
+                            (LINK_TYPE_HTML.equals(type) || LINK_TYPE_XHTML.equals(type)))) {
                         state.getFeed().setLink(href);
-                    } else if (type != null && (type.equals(LINK_TYPE_ATOM)
-                            || type.equals(LINK_TYPE_RSS))) {
+                    } else if (LINK_TYPE_ATOM.equals(type) || LINK_TYPE_RSS.equals(type)) {
                         // treat as podlove alternate feed
                         String title = attributes.getValue(LINK_TITLE);
-                        if (title == null) {
+                        if (TextUtils.isEmpty(title)) {
                             title = href;
                         }
                         state.addAlternateFeedUrl(title, href);
                     }
-                } else if (rel.equals(LINK_REL_PAYMENT)) {
+                } else if (LINK_REL_ARCHIVES.equals(rel) && state.getFeed() != null) {
+                    String type = attributes.getValue(LINK_TYPE);
+                    if (LINK_TYPE_ATOM.equals(type) || LINK_TYPE_RSS.equals(type)) {
+                        String title = attributes.getValue(LINK_TITLE);
+                        if (TextUtils.isEmpty(title)) {
+                            title = href;
+                        }
+                        state.addAlternateFeedUrl(title, href);
+                    } else if (LINK_TYPE_HTML.equals(type) || LINK_TYPE_XHTML.equals(type)) {
+                        //A Link such as to a directory such as iTunes
+                    }
+                } else if (LINK_REL_PAYMENT.equals(rel) && state.getFeed() != null) {
                     state.getFeed().setPaymentLink(href);
-                } else if (rel.equals(LINK_REL_NEXT)) {
+                } else if (LINK_REL_NEXT.equals(rel) && state.getFeed() != null) {
                     state.getFeed().setPaged(true);
                     state.getFeed().setNextPageLink(href);
                 }
@@ -134,11 +153,13 @@ public class NSAtom extends Namespace {
 
     @Override
     public void handleElementEnd(String localName, HandlerState state) {
-        if (localName.equals(ENTRY)) {
+        if (ENTRY.equals(localName)) {
             if (state.getCurrentItem() != null &&
                     state.getTempObjects().containsKey(NSITunes.DURATION)) {
-                if (state.getCurrentItem().hasMedia()) {
-                    state.getCurrentItem().getMedia().setDuration((Integer) state.getTempObjects().get(NSITunes.DURATION));
+                FeedItem currentItem = state.getCurrentItem();
+                if (currentItem.hasMedia()) {
+                    Integer duration = (Integer) state.getTempObjects().get(NSITunes.DURATION);
+                    currentItem.getMedia().setDuration(duration);
                 }
                 state.getTempObjects().remove(NSITunes.DURATION);
             }
@@ -163,48 +184,45 @@ public class NSAtom extends Namespace {
                 textElement.setContent(content);
             }
 
-            if (top.equals(ID)) {
-                if (second.equals(FEED)) {
+            if (ID.equals(top)) {
+                if (FEED.equals(second) && state.getFeed() != null) {
                     state.getFeed().setFeedIdentifier(content);
-                } else if (second.equals(ENTRY)) {
+                } else if (ENTRY.equals(second) && state.getCurrentItem() != null) {
                     state.getCurrentItem().setItemIdentifier(content);
                 }
-            } else if (top.equals(TITLE)) {
-
-                if (second.equals(FEED)) {
+            } else if (TITLE.equals(top) && textElement != null) {
+                if (FEED.equals(second) && state.getFeed() != null) {
                     state.getFeed().setTitle(textElement.getProcessedContent());
-                } else if (second.equals(ENTRY)) {
-                    state.getCurrentItem().setTitle(
-                            textElement.getProcessedContent());
+                } else if (ENTRY.equals(second) && state.getCurrentItem() != null) {
+                    state.getCurrentItem().setTitle(textElement.getProcessedContent());
                 }
-            } else if (top.equals(SUBTITLE)) {
-                if (second.equals(FEED)) {
-                    state.getFeed().setDescription(
-                            textElement.getProcessedContent());
-                }
-            } else if (top.equals(CONTENT)) {
-                if (second.equals(ENTRY)) {
-                    state.getCurrentItem().setDescription(
-                            textElement.getProcessedContent());
-                }
-            } else if (top.equals(UPDATED)) {
-                if (second.equals(ENTRY)
-                        && state.getCurrentItem().getPubDate() == null) {
-                    state.getCurrentItem().setPubDate(
-                            DateUtils.parse(content));
-                }
-            } else if (top.equals(PUBLISHED)) {
-                if (second.equals(ENTRY)) {
-                    state.getCurrentItem().setPubDate(
-                            DateUtils.parse(content));
-                }
-            } else if (top.equals(IMAGE)) {
-                if(state.getFeed().getImage() == null) {
-                    state.getFeed().setImage(new FeedImage(state.getFeed(), content, null));
+            } else if (SUBTITLE.equals(top) && FEED.equals(second) && textElement != null &&
+                state.getFeed() != null) {
+                state.getFeed().setDescription(textElement.getProcessedContent());
+            } else if (CONTENT.equals(top) && ENTRY.equals(second) && textElement != null &&
+                state.getCurrentItem() != null) {
+                state.getCurrentItem().setDescription(textElement.getProcessedContent());
+            } else if (SUMMARY.equals(top) && ENTRY.equals(second) && textElement != null &&
+                state.getCurrentItem() != null && state.getCurrentItem().getDescription() == null) {
+                state.getCurrentItem().setDescription(textElement.getProcessedContent());
+            } else if (UPDATED.equals(top) && ENTRY.equals(second) && state.getCurrentItem() != null &&
+                state.getCurrentItem().getPubDate() == null) {
+                state.getCurrentItem().setPubDate(DateUtils.parse(content));
+            } else if (PUBLISHED.equals(top) && ENTRY.equals(second) && state.getCurrentItem() != null) {
+                state.getCurrentItem().setPubDate(DateUtils.parse(content));
+            } else if (IMAGE_LOGO.equals(top) && state.getFeed() != null && state.getFeed().getImage() == null) {
+                state.getFeed().setImage(new FeedImage(state.getFeed(), content, null));
+            } else if (IMAGE_ICON.equals(top) && state.getFeed() != null) {
+                state.getFeed().setImage(new FeedImage(state.getFeed(), content, null));
+            } else if (AUTHOR_NAME.equals(top) && AUTHOR.equals(second) &&
+                    state.getFeed() != null && state.getCurrentItem() == null) {
+                String currentName = state.getFeed().getAuthor();
+                if (currentName == null) {
+                    state.getFeed().setAuthor(content);
+                } else {
+                    state.getFeed().setAuthor(currentName + ", " + content);
                 }
             }
-
         }
     }
-
 }
