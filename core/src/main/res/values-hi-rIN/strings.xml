@@ -52,7 +52,6 @@
   <string name="remove_feed_label">पॉडकास्ट हटाएँ
 </string>
   <string name="share_link_label">शेयर वेबसाइट लिंक</string>
-  <string name="feed_delete_confirmation_msg">इसकी पुष्टि करें कि आप इस फ़ीड और इस फ़ीड के सभी प्रकरणों को हटाना चाहते हैं जिन्हें आपने डाउनलोड किया है.</string>
   <string name="feed_remover_msg">फ़ीड निकाल रहा है</string>
   <!--actions on feeditems-->
   <string name="download_label">डाउनलोड</string>

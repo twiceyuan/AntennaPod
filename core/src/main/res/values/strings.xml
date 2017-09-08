@@ -31,6 +31,10 @@
     <!-- Statistics fragment -->
     <string name="total_time_listened_to_podcasts">Total time of podcasts played:</string>
     <string name="statistics_details_dialog">%1$d out of %2$d episodes started.\n\nPlayed %3$s out of %4$s.</string>
+    <string name="statistics_mode">Statistics mode</string>
+    <string name="statistics_mode_normal">Calculate duration that was actually played. Playing twice is counted twice, while marking as played is not counted</string>
+    <string name="statistics_mode_count_all">Sum up all podcasts marked as played</string>
+    <string name="statistics_speed_not_counted">Notice: Playback speed is never taken into account.</string>
 
     <!-- Main activity -->
     <string name="drawer_open">Open menu</string>
@@ -39,6 +43,7 @@
     <string name="drawer_feed_order_unplayed_episodes">Sort by counter</string>
     <string name="drawer_feed_order_alphabetical">Sort alphabetically</string>
     <string name="drawer_feed_order_last_update">Sort by publication date</string>
+    <string name="drawer_feed_order_most_played">Sort by number of played episodes</string>
     <string name="drawer_feed_counter_new_unplayed">Number of new and unplayed episodes</string>
     <string name="drawer_feed_counter_new">Number of new episodes</string>
     <string name="drawer_feed_counter_unplayed">Number of unplayed episodes</string>
@@ -71,6 +76,7 @@
     <string name="refresh_label">Refresh</string>
     <string name="external_storage_error_msg">No external storage is available. Please make sure that external storage is mounted so that the app can work properly.</string>
     <string name="chapters_label">Chapters</string>
+    <string name="chapter_duration">Duration: %1$s</string>
     <string name="shownotes_label">Shownotes</string>
     <string name="description_label">Description</string>
     <string name="most_recent_prefix">Most recent episode:\u0020</string>
@@ -120,11 +126,12 @@
     <string name="remove_feed_label">Remove Podcast</string>
     <string name="share_label">Share&#8230;</string>
     <string name="share_link_label">Share Link</string>
+    <string name="share_file_label">Share File</string>
     <string name="share_link_with_position_label">Share Link with Position</string>
     <string name="share_feed_url_label">Share Feed URL</string>
     <string name="share_item_url_label">Share Episode File URL</string>
     <string name="share_item_url_with_position_label">Share Episode File URL with Position</string>
-    <string name="feed_delete_confirmation_msg">Please confirm that you want to delete this feed and ALL episodes of this feed that you have downloaded.</string>
+    <string name="feed_delete_confirmation_msg">Please confirm that you want to delete the feed \"%1$s\" and ALL episodes of this feed that you have downloaded.</string>
     <string name="feed_remover_msg">Removing Feed</string>
     <string name="load_complete_feed">Refresh complete Feed</string>
     <string name="hide_episodes_title">Hide Episodes</string>
@@ -302,7 +309,7 @@
     <string name="pref_pauseOnDisconnect_sum">Pause playback when headphones or bluetooth are disconnected</string>
     <string name="pref_unpauseOnHeadsetReconnect_sum">Resume playback when the headphones are reconnected</string>
     <string name="pref_unpauseOnBluetoothReconnect_sum">Resume playback when bluetooth reconnects</string>
-    <string name="pref_hardwareForwardButtonSkips_title">Forward button skips</string>
+    <string name="pref_hardwareForwardButtonSkips_title">Forward Button Skips</string>
     <string name="pref_hardwareForwardButtonSkips_sum">When pressing a hardware forward button skip to the next episode instead of fast-forwarding</string>
     <string name="pref_hardwarePreviousButtonRestarts_title">Previous button restarts</string>
     <string name="pref_hardwarePreviousButtonRestarts_sum">When pressing a hardware previous button restart playing the current episode instead of rewinding</string>
@@ -310,7 +317,7 @@
     <string name="pref_auto_delete_sum">Delete episode when playback completes</string>
     <string name="pref_auto_delete_title">Auto Delete</string>
     <string name="pref_smart_mark_as_played_sum">Mark episodes as played even if less than a certain amount of seconds of playing time is still left</string>
-    <string name="pref_smart_mark_as_played_title">Smart mark as played</string>
+    <string name="pref_smart_mark_as_played_title">Smart Mark as Played</string>
     <string name="pref_skip_keeps_episodes_sum">Keep episodes when they are skipped</string>
     <string name="pref_skip_keeps_episodes_title">Keep Skipped Episodes</string>
     <string name="playback_pref">Playback</string>
@@ -384,8 +391,10 @@
     <string name="pref_gpodnet_notifications_sum">This setting does not apply to authentication errors.</string>
     <string name="pref_playback_speed_title">Playback Speeds</string>
     <string name="pref_playback_speed_sum">Customize the speeds available for variable speed audio playback</string>
-    <string name="pref_fast_forward">Fast forward time</string>
-    <string name="pref_rewind">Rewind time</string>
+    <string name="pref_fast_forward">Fast Forward Skip Time</string>
+    <string name="pref_fast_forward_sum">Customize the number of seconds to jump forward when the fast forward button is clicked</string>
+    <string name="pref_rewind">Rewind Skip Time</string>
+    <string name="pref_rewind_sum">Customize the number of seconds to jump backwards when the rewind button is clicked</string>
     <string name="pref_gpodnet_sethostname_title">Set hostname</string>
     <string name="pref_gpodnet_sethostname_use_default_host">Use default host</string>
     <string name="pref_expandNotify_title">Expand Notification</string>
@@ -410,7 +419,7 @@
     <string name="crash_report_sum">Send the latest crash report via e-mail</string>
     <string name="send_email">Send e-mail</string>
     <string name="experimental_pref">Experimental</string>
-    <string name="pref_sonic_title">Sonic media player</string>
+    <string name="pref_sonic_title">Sonic Media Player</string>
     <string name="pref_sonic_message">Use built-in sonic media player as a replacement for Android\'s native mediaplayer and Prestissimo</string>
     <string name="pref_current_value">Current value: %1$s</string>
     <string name="pref_proxy_title">Proxy</string>
@@ -421,6 +430,8 @@
     <string name="pref_cast_title">Chromecast support</string>
     <string name="pref_cast_message_play_flavor">Enable support for remote media playback on Cast devices (such as Chromecast, Audio Speakers or Android TV)</string>
     <string name="pref_cast_message_free_flavor">Chromecast requires third party proprietary libraries that are disabled in this version of AntennaPod</string>
+    <string name="pref_enqueue_downloaded_title">Enqueue Dowloaded</string>
+    <string name="pref_enqueue_downloaded_summary">Add downloaded episodes to the queue</string>
 
     <!-- Auto-Flattr dialog -->
     <string name="auto_flattr_enable">Enable automatic flattring</string>
@@ -432,6 +443,8 @@
     <string name="search_hint">Search for episodes</string>
     <string name="found_in_shownotes_label">Found in show notes</string>
     <string name="found_in_chapters_label">Found in chapters</string>
+    <string name="found_in_authors_label">Found in authors</string>
+    <string name="found_in_feeds_label">Found in feeds</string>
     <string name="search_status_no_results">No results were found</string>
     <string name="search_label">Search</string>
     <string name="found_in_title_label">Found in title</string>

@@ -61,7 +61,6 @@
   <string name="show_info_label">Vis information</string>
   <string name="remove_feed_label">Fjern podcast</string>
   <string name="share_link_label">Del webside link</string>
-  <string name="feed_delete_confirmation_msg">Bekræft venligst at du vil fjerne dette feed og ALLE episoder du har downloadet fra dette feed.</string>
   <string name="feed_remover_msg">Fjerner feed</string>
   <string name="load_complete_feed">Opdater hele feed\'et</string>
   <!--actions on feeditems-->

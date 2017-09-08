@@ -73,7 +73,6 @@
   <string name="mark_all_read_confirmation_msg">Conferma che desideri segnare tutti gli episodi come riprodotti.</string>
   <string name="mark_all_read_feed_confirmation_msg">Conferma che desideri segnare tutti gli episodi in questo feed come riprodotti.</string>
   <string name="show_info_label">Mostra delle informazioni</string>
-  <string name="feed_delete_confirmation_msg">Conferma che desideri cancellare questo feed e TUTTI gli episodi di  questo feed che hai scaricato.</string>
   <string name="hide_episodes_title">Nascondi gli episodi</string>
   <string name="episode_actions">Applica le azioni</string>
   <string name="hide_unplayed_episodes_label">Non riprodotti</string>

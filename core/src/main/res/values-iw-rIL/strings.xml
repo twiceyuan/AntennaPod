@@ -77,7 +77,6 @@
   <string name="show_info_label">הצג מידע</string>
   <string name="remove_feed_label">הסר פודקאסט</string>
   <string name="share_link_label">שתף קישור אתר</string>
-  <string name="feed_delete_confirmation_msg">אשר מחיקת הזנה זו ואת כל פרקי ההזנה שהורדת.</string>
   <string name="feed_remover_msg">הסר הזנה</string>
   <string name="load_complete_feed">רענן את כל ההזנה</string>
   <!--actions on feeditems-->

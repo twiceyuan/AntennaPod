@@ -15,6 +15,7 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.media.AudioManager;
 import android.media.MediaPlayer;
+import android.net.Uri;
 import android.os.Binder;
 import android.os.Build;
 import android.os.Bundle;
@@ -49,9 +50,11 @@ import de.danoeh.antennapod.core.ClientConfig;
 import de.danoeh.antennapod.core.R;
 import de.danoeh.antennapod.core.event.MessageEvent;
 import de.danoeh.antennapod.core.feed.Chapter;
+import de.danoeh.antennapod.core.feed.Feed;
 import de.danoeh.antennapod.core.feed.FeedItem;
 import de.danoeh.antennapod.core.feed.FeedMedia;
 import de.danoeh.antennapod.core.feed.MediaType;
+import de.danoeh.antennapod.core.feed.SearchResult;
 import de.danoeh.antennapod.core.glide.ApGlideSettings;
 import de.danoeh.antennapod.core.preferences.PlaybackPreferences;
 import de.danoeh.antennapod.core.preferences.SleepTimerPreferences;
@@ -60,6 +63,7 @@ import de.danoeh.antennapod.core.receiver.MediaButtonReceiver;
 import de.danoeh.antennapod.core.storage.DBReader;
 import de.danoeh.antennapod.core.storage.DBTasks;
 import de.danoeh.antennapod.core.storage.DBWriter;
+import de.danoeh.antennapod.core.storage.FeedSearcher;
 import de.danoeh.antennapod.core.util.IntList;
 import de.danoeh.antennapod.core.util.QueueAccess;
 import de.danoeh.antennapod.core.util.playback.ExternalMedia;
@@ -363,6 +367,23 @@ public class PlaybackService extends MediaBrowserServiceCompat {
                 MediaBrowserCompat.MediaItem.FLAG_BROWSABLE);
     }
 
+    private MediaBrowserCompat.MediaItem createBrowsableMediaItemForFeed(Feed feed) {
+        MediaDescriptionCompat.Builder builder = new MediaDescriptionCompat.Builder()
+                .setMediaId("FeedId:" + Long.toString(feed.getId()))
+                .setTitle(feed.getTitle())
+                .setDescription(feed.getDescription())
+                .setSubtitle(feed.getCustomTitle());
+        if(feed.getImageLocation() != null) {
+            builder.setIconUri(Uri.parse(feed.getImageLocation()));
+        }
+        if(feed.getLink() != null) {
+            builder.setMediaUri(Uri.parse(feed.getLink()));
+        }
+        MediaDescriptionCompat description = builder.build();
+        return new MediaBrowserCompat.MediaItem(description,
+                MediaBrowserCompat.MediaItem.FLAG_BROWSABLE);
+    }
+
     @Override
     public void onLoadChildren(@NonNull String parentId,
                                @NonNull Result<List<MediaBrowserCompat.MediaItem>> result) {
@@ -370,7 +391,17 @@ public class PlaybackService extends MediaBrowserServiceCompat {
         List<MediaBrowserCompat.MediaItem> mediaItems = new ArrayList<>();
         if (parentId.equals(getResources().getString(R.string.app_name))) {
             // Root List
-            mediaItems.add(createBrowsableMediaItemForRoot());
+            try {
+                if (!(taskManager.getQueue().isEmpty())) {
+                    mediaItems.add(createBrowsableMediaItemForRoot());
+                }
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+            List<Feed> feeds = DBReader.getFeedList();
+            for (Feed feed: feeds) {
+                mediaItems.add(createBrowsableMediaItemForFeed(feed));
+            }
         } else if (parentId.equals(getResources().getString(R.string.queue_label))){
             // Child List
             try {
@@ -379,6 +410,14 @@ public class PlaybackService extends MediaBrowserServiceCompat {
                 }
             } catch (InterruptedException e) {
                 e.printStackTrace();
+            }
+        } else if (parentId.startsWith("FeedId:")) {
+            Long feedId = Long.parseLong(parentId.split(":")[1]);
+            List<FeedItem> feedItems = DBReader.getFeedItemList(DBReader.getFeed(feedId));
+            for (FeedItem feedItem: feedItems) {
+                if(feedItem.getMedia() != null && feedItem.getMedia().getMediaItem() != null) {
+                    mediaItems.add(feedItem.getMedia().getMediaItem());
+                }
             }
         }
         result.sendResult(mediaItems);
@@ -477,11 +516,11 @@ public class PlaybackService extends MediaBrowserServiceCompat {
                 } else {
                     // assume skip command comes from a (bluetooth) media button
                     // user actually wants to fast-forward
-                    seekDelta(UserPreferences.getFastFowardSecs() * 1000);
+                    seekDelta(UserPreferences.getFastForwardSecs() * 1000);
                 }
                 break;
             case KeyEvent.KEYCODE_MEDIA_FAST_FORWARD:
-                mediaPlayer.seekDelta(UserPreferences.getFastFowardSecs() * 1000);
+                mediaPlayer.seekDelta(UserPreferences.getFastForwardSecs() * 1000);
                 break;
             case KeyEvent.KEYCODE_MEDIA_PREVIOUS:
                 if(UserPreferences.shouldHardwarePreviousButtonRestart()) {
@@ -1368,8 +1407,15 @@ public class PlaybackService extends MediaBrowserServiceCompat {
                 Log.d(TAG, "Car was unplugged during playback.");
                 pauseIfPauseOnDisconnect();
             } else {
-                mediaPlayer.setStartWhenPrepared(true);
-                mediaPlayer.prepare();
+                PlayerStatus playerStatus = mediaPlayer.getPlayerStatus();
+                if (playerStatus == PlayerStatus.PAUSED || playerStatus == PlayerStatus.PREPARED) {
+                    mediaPlayer.resume();
+                } else if (playerStatus == PlayerStatus.PREPARING) {
+                    mediaPlayer.setStartWhenPrepared(!mediaPlayer.isStartWhenPrepared());
+                } else if (playerStatus == PlayerStatus.INITIALIZED) {
+                    mediaPlayer.setStartWhenPrepared(true);
+                    mediaPlayer.prepare();
+                }
             }
         }
     };
@@ -1635,8 +1681,22 @@ public class PlaybackService extends MediaBrowserServiceCompat {
 
         @Override
         public void onPlayFromSearch (String query, Bundle extras) {
-            //Until we parse the query just play from queue
+            Log.d(TAG, "onPlayFromSearch  query=" + query + " extras=" + extras.toString());
+
+            List<SearchResult> results = FeedSearcher.performSearch(getBaseContext(),query,0);
+            for( SearchResult result : results) {
+                try {
+                    FeedMedia p = ((FeedItem)(result.getComponent())).getMedia();
+                    mediaPlayer.playMediaObject(p, !p.localFileAvailable(), true, true);
+                    return;
+                } catch (Exception e) {
+                    Log.d(TAG, e.getMessage());
+                    e.printStackTrace();
+                    continue;
+                }
+            }
             onPlay();
+            return;
         }
 
         @Override
@@ -1668,7 +1728,7 @@ public class PlaybackService extends MediaBrowserServiceCompat {
         @Override
         public void onFastForward() {
             Log.d(TAG, "onFastForward()");
-            seekDelta(UserPreferences.getFastFowardSecs() * 1000);
+            seekDelta(UserPreferences.getFastForwardSecs() * 1000);
         }
 
         @Override
@@ -1677,7 +1737,7 @@ public class PlaybackService extends MediaBrowserServiceCompat {
             if(UserPreferences.shouldHardwareButtonSkip()) {
                 mediaPlayer.skip();
             } else {
-                seekDelta(UserPreferences.getFastFowardSecs() * 1000);
+                seekDelta(UserPreferences.getFastForwardSecs() * 1000);
             }
         }
 
